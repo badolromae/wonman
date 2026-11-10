@@ -1650,7 +1650,7 @@ const GL3 = {
 
 /* ===================== 07. 로그인 ===================== */
 /* 계정 바꾸기: 앱 안 [프로젝트·설정 → 계정 바꾸기]에서 새 줄을 만들어 아래 CRED 한 줄을 통째로 바꿔 넣으세요. */
-const CRED = /*CRED*/{ id: 'wonman', salt: 'c794670e62cb1607e4db0f6799300240', iter: 120000, hash: '57f1dce519a12d44a41b0d459fe9ade8ea8a5265f60cf86f4c82f047166e05cc' }/*CRED*/;
+const CRED = /*CRED*/{ id: 'coin81', salt: '397dc19677233f23eade86d980cf559b', iter: 120000, hash: '7b91a57c3c59fe63ca9f14e7c2cdf4a21617b0d7781908aa13fe2c7ec9c12ed2' }/*CRED*/;
 const hexb = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
 const bhex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 async function derive(id, pw, salt, iter) {
