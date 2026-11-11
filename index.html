@@ -129,6 +129,10 @@ table.area tfoot td{font-weight:600;border-bottom:0;border-top:1.5px solid var(-
 .fchip button:hover{color:var(--ink)}
 .roomc select[data-addf]{grid-column:1/-1}
 .fit{grid-column:1/-1;font-size:12.5px}.fit p{margin:2px 0}.fit .ok{color:var(--dimc)}.fit .bad,p.fit.bad{color:var(--danger)}
+.chk-list{display:grid;gap:10px}.ci{border:1px solid var(--line);border-radius:var(--r1);padding:10px 12px}
+.ci .cm{font-size:13.5px;margin-bottom:8px}.ci .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--warn);border:1px solid currentColor;border-radius:4px;padding:0 5px;margin-right:6px}
+.ci .cf{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.din{display:inline-flex;gap:4px;align-items:center;font-size:12px}.din input{width:70px;padding:4px 6px}
+.row.sz{align-items:center;gap:5px}.row.sz input{width:78px;padding:5px 6px}.fpy{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 table.area tr.fl td{font-weight:600;padding-top:12px;color:var(--accent)}
 /* ---------- 작업 화면 ---------- */
 .stage{display:grid;grid-template-rows:auto minmax(0,1fr) 28px;min-width:0;background:var(--canvas);position:relative}
@@ -198,8 +202,8 @@ table.area tr.fl td{font-weight:600;padding-top:12px;color:var(--accent)}
 .sheetlist button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
 
 /* 더보기·설정 */
-dialog#more{border:1px solid var(--line);border-radius:var(--r2);background:var(--panel);color:var(--ink);padding:0;width:min(560px,94vw);max-height:86vh}
-dialog#more::backdrop{background:rgba(10,14,16,.35)}
+dialog#more,dialog#check{border:1px solid var(--line);border-radius:var(--r2);background:var(--panel);color:var(--ink);padding:0;width:min(560px,94vw);max-height:86vh}
+dialog#check{width:min(640px,94vw)}dialog#check::backdrop,dialog#more::backdrop{background:rgba(10,14,16,.35)}
 .more-in{padding:20px 22px;overflow:auto;max-height:86vh}
 .more-in h2{font-size:16px;margin:0 0 14px}
 .more-in h3{font-size:13px;margin:20px 0 8px}
@@ -254,7 +258,7 @@ pre.code{background:var(--panel2);border:1px solid var(--line);border-radius:var
  .mnav button{border:0;background:transparent;padding:8px 0 9px;font-size:11.5px;color:var(--sub);display:grid;justify-items:center;gap:2px}
  .mnav button[aria-current="page"]{color:var(--accent);font-weight:600}
  .mnav .icon{width:22px;height:22px}
- dialog#more{width:100vw;max-width:100vw;height:100%;max-height:100%;border:0;border-radius:0;margin:0}
+ dialog#more,dialog#check{width:100vw;max-width:100vw;height:100%;max-height:100%;border:0;border-radius:0;margin:0}
  .more-in{max-height:100%;padding-bottom:90px}
 }
 @media print{
@@ -374,6 +378,7 @@ pre.code{background:var(--panel2);border:1px solid var(--line);border-radius:var
 </div>
 
 <dialog id="more"><div class="more-in" id="moreIn"></div></dialog>
+<dialog id="check" class="dlg"><div class="more-in" id="checkIn"></div></dialog>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -449,25 +454,43 @@ const ROOF_NAMES = { gable: '박공(맞배)지붕', hip: '모임(우진각)지�
 const WALL_MATS = { stucco: '스터코 (화이트)', brick: '적벽돌', wood: '목재 사이딩', metal: '금속 패널 (징크)', concrete: '노출 콘크리트' };
 const ROOF_MATS = { metal: '금속 돌출이음', tile: '기와', shingle: '아스팔트 슁글', zinc: '징크' };
 const ROOM_KINDS = { master: '안방', bed: '침대방', other: '그외 방' };
+const STAIRS = { U: 'ㄷ자', L: 'ㄴ자', I: '일자', O: '원형' };
 const MAX_PY = 50, MAX_FLOORS = 5;
 const DEFAULT_TEXT = '15평 박공지붕 전원주택, 방 2개 욕실 1개 팬트리, 실내높이 3미터, 데크. 안방은 슈퍼싱글 침대 두 개에 붙박이장, 다른 방은 슬라이딩도어에 책상 두 개';
 
-/** 면적별 최대 방 개수: 거실·주방·현관·욕실에 약 5평, 방 하나에 약 4.5평 */
+/** 면적별 최대 방 개수: 거실·주방·현관·욕실에 약 5평, 방 하나에 약 4.5평 / 거실 없는 층은 복도·욕실 약 3평 */
 function maxRooms(areaPy) { return clamp(Math.floor((areaPy - 5) / 4.5), 0, 8); }
+function maxRoomsNoLiving(areaPy) { return clamp(Math.floor((areaPy - 3) / 4.2), 0, 10); }
 function isMulti(spec) { return /빌라|다세대|다가구|연립/.test(spec.type); }
-/** 한 층 바닥면적(평): 빌라는 세대 면적, 주택은 전체 면적 ÷ 층수 */
-function floorArea(spec) { return isMulti(spec) ? spec.areaPy : spec.areaPy / spec.floors; }
+/** 층별 바닥면적(평). 빌라는 한 세대, 주택은 층마다 */
+function floorPys(spec) {
+  const n = spec.floors, out = [];
+  for (let i = 0; i < n; i++) out.push(isMulti(spec) ? spec.areaPy : (spec.floorPy && spec.floorPy[i]) || (spec.areaMode === 'total' ? spec.areaPy / n : spec.areaPy));
+  return out;
+}
+function floorArea(spec) { return floorPys(spec)[0]; }
+function totalPy(spec) { return floorPys(spec).reduce((a, b) => a + b, 0); }
+function livingOn(spec, i) { return spec.floors === 1 || isMulti(spec) || (spec.livingFloors || [1]).includes(i + 1); }
 function roomCap(spec) {
-  const pf = floorArea(spec);
-  if (isMulti(spec) || spec.floors === 1) return maxRooms(pf);
-  return Math.min(8, maxRooms(pf) + (spec.floors - 1) * maxRooms(pf + 7));
+  const pys = floorPys(spec);
+  if (isMulti(spec)) return maxRooms(pys[0]);
+  return Math.min(16, pys.reduce((s, p, i) => s + (livingOn(spec, i) ? maxRooms(p) : maxRoomsNoLiving(p)), 0));
 }
-
 function defaultSpec() {
-  return { type: '전원주택', areaPy: 15, W: null, D: null, roof: 'gable', pitch: 30, H: 2700, floors: 1, piloti: false,
-    rooms: [], baths: 1, pantry: 'none', utility: false, deck: false, tub: false, wallMat: 'stucco', roofMat: 'metal', extra: [] };
+  return { type: '전원주택', areaPy: 15, areaMode: 'floor', floorPy: null, W: null, D: null, roof: 'gable', pitch: 30, H: 2700, floors: 1, piloti: false,
+    stair: 'U', livingFloors: [1], rooms: [], baths: 1, pantry: 'none', utility: false, deck: false, tub: false, wallMat: 'stucco', roofMat: 'metal', extra: [] };
 }
-function newRoom(kind, o = {}) { return { id: uid(), kind, name: o.name || null, furn: o.furn || null, dress: !!o.dress, ensuite: !!o.ensuite, sliding: !!o.sliding, floor: o.floor || 0 }; }
+function newRoom(kind, o = {}) { return { id: uid(), kind, name: o.name || null, furn: o.furn || null, dress: !!o.dress, ensuite: !!o.ensuite, sliding: !!o.sliding, floor: o.floor || 0, size: o.size || null }; }
+const ROOMWORD = /안방|부부\s*방|침실|큰\s*방|아이\s*방|자녀\s*방|아들\s*방|딸\s*방|게스트|손님\s*방|서재|작업실|공부방|취미방|게임방|오피스|운동방|음악실|방\s*(하나|한|두|다른|나머지|1|2|3)|드레스/;
+const HOUSEWORD = /주택|빌라|집|건물|층당|한\s*층|각\s*층|연면적|전체|총|세대|농막|세컨|원룸|창고|평형/;
+/** 방 크기 읽기: 4x3.6m, 4000×3600, 5평 */
+function roomSizeIn(s) {
+  let m = s.match(/(\d+(?:\.\d+)?)\s*(m|미터|mm)?\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*(m|미터|mm)?/);
+  if (m) { let a = +m[1], b = +m[3]; if (a < 100) a *= 1000; if (b < 100) b *= 1000; return { w: r100(a), d: r100(b), word: m[0] }; }
+  m = s.match(/(\d+(?:\.\d+)?)\s*평/);
+  if (m) { const A = +m[1] * PY * 1e6, w = r100(Math.sqrt(A * 1.15)); return { w, d: r100(A / w), py: +m[1], word: m[0] }; }
+  return null;
+}
 
 /** 문장 조각에서 가구 찾기 → [{id, n}] */
 function findFurniture(seg, tokens) {
@@ -497,22 +520,37 @@ function parseSentence(text) {
   const types = [['다세대', '빌라'], ['다가구', '빌라'], ['빌라', '빌라'], ['연립', '빌라'], ['농막', '농막'], ['세컨하우스', '세컨하우스'], ['전원주택', '전원주택'], ['단독주택', '단독주택'], ['원룸', '원룸형'], ['창고', '창고'], ['사무실', '사무실'], ['카페', '카페'], ['주택', '주택']];
   for (const [k, v] of types) if (t.includes(k)) { spec.type = v; hit(new RegExp(k), 'type', '건물 유형: ' + v); break; }
   // 층수
-  let m = raw.match(/([1-9])\s*층\s*(?:짜리|건물|규모|빌라|주택|집|건축)?(?!\s*(?:에|은|는|엔|으로|에는))/) || raw.match(/(이층|삼층|사층|오층)\s*(?:집|주택|건물)?/);
+  const segs0 = raw.split(/[,\n;]|\.(?!\d)|그리고/);
+  let m = null;
+  for (const sg of segs0) { if (ROOMWORD.test(sg) && !HOUSEWORD.test(sg)) continue; if (/거실/.test(sg) && !HOUSEWORD.test(sg)) continue; const mm = sg.match(/([1-9])\s*층\s*(?:짜리|건물|규모|빌라|주택|집|건축)?(?!\s*(?:에|은|는|엔|으로|에는))/) || sg.match(/(이층|삼층|사층|오층)\s*(?:집|주택|건물)?/); if (mm) { m = mm; break; } }
   if (m) { const f = toNum(m[1]) || { 이층: 2, 삼층: 3, 사층: 4, 오층: 5 }[m[1]]; if (f) { if (f > MAX_FLOORS) warn.push(`최대 ${MAX_FLOORS}층까지 만듭니다.`); spec.floors = clamp(f, 1, MAX_FLOORS); tokens.push({ word: m[0].trim(), cat: 'size', label: `${spec.floors}층` }); } }
   else if (/복층/.test(t)) { spec.floors = 2; hit(/복층/, 'size', '2층(복층)'); }
   else if (isMulti(spec)) spec.floors = 4;
   if (hit(/필로티|1층\s*주차|주차장/, 'opt', '1층 필로티 주차')) spec.piloti = true;
   else if (isMulti(spec) && spec.floors >= 3) spec.piloti = true;
 
-  // 면적
-  m = raw.match(/(\d+(?:\.\d+)?)\s*평/);
-  if (m) { spec.areaPy = +m[1]; tokens.push({ word: m[0], cat: 'size', label: `면적: ${m[1]}평 (${fmt(+m[1] * PY, 1)}㎡)` }); }
+  // 면적 (방 크기와 구분: 방 이름이 있는 조각의 '평'은 방 크기로 봄)
+  const segsA = raw.split(/[,\n;]|\.(?!\d)|그리고/);
+  const houseSeg = re => { for (const sg of segsA) { const mm = sg.match(re); if (mm && !(ROOMWORD.test(sg) && !HOUSEWORD.test(sg))) return mm; } return null; };
+  m = raw.match(/(?:연면적|전체\s*면적|전체|총\s*면적|총|합계)\s*(\d+(?:\.\d+)?)\s*평/);
+  if (m) { spec.areaPy = +m[1]; spec.areaMode = 'total'; tokens.push({ word: m[0], cat: 'size', label: `전체 면적: ${m[1]}평` }); }
+  else if ((m = houseSeg(/(?:층당|한\s*층(?:에|당)?|각\s*층)\s*(\d+(?:\.\d+)?)\s*평/))) { spec.areaPy = +m[1]; spec.areaMode = 'floor'; tokens.push({ word: m[0], cat: 'size', label: `층당 면적: ${m[1]}평` }); }
+  else if ((m = houseSeg(/(\d+(?:\.\d+)?)\s*평/))) { spec.areaPy = +m[1]; spec.areaMode = 'floor'; tokens.push({ word: m[0], cat: 'size', label: `면적: ${m[1]}평 (${fmt(+m[1] * PY, 1)}㎡)${isMulti(spec) ? ' — 한 세대' : spec.floors > 1 ? ' — 층마다' : ''}` }); }
+  const fpRe = /([1-5])\s*층\s*(?:은|는|이|:)?\s*(\d+(?:\.\d+)?)\s*평/g; let fpm; const fp = [];
+  while ((fpm = fpRe.exec(raw))) { fp[+fpm[1] - 1] = +fpm[2]; tokens.push({ word: fpm[0], cat: 'size', label: `${fpm[1]}층 ${fpm[2]}평` }); }
+  if (fp.filter(Boolean).length >= 2) { spec.floors = Math.max(spec.floors, fp.length); spec.floorPy = [...Array(spec.floors)].map((_, i) => fp[i] || fp.find(Boolean)); spec.areaMode = 'each'; spec.areaPy = spec.floorPy[0]; }
+  // 계단·거실 층
+  if (/계단/.test(t)) {
+    for (const [re, k] of [[/원형|나선|회전/, 'O'], [/ㄷ\s*자|U\s*자|유턴|되돌아/, 'U'], [/ㄴ\s*자|L\s*자|꺾인|ㄱ\s*자/, 'L'], [/일자|직선|1자|곧은/, 'I']]) if (hit(re, 'opt', '계단: ' + STAIRS[k])) { spec.stair = k; break; }
+  }
+  const lv = [...raw.matchAll(/([1-5])\s*층\s*(?:에만|에도|에|은|는)?\s*거실|거실\s*(?:은|는|을)?\s*([1-5])\s*층/g)].map(x => +(x[1] || x[2]));
+  if (lv.length) { spec.livingFloors = [...new Set([...(/에도/.test(raw) ? [1] : []), ...lv])]; tokens.push({ word: (raw.match(/([1-5])\s*층\s*(?:에만|에도|에|은|는)?\s*거실|거실\s*(?:은|는|을)?\s*([1-5])\s*층/) || [''])[0], cat: 'room', label: `거실: ${spec.livingFloors.join('·')}층` }); }
   m = raw.match(/(\d+(?:\.\d+)?)\s*(㎡|m2|제곱미터|평방미터|헤베)/);
   if (m) { spec.areaPy = +m[1] / PY; tokens.push({ word: m[0], cat: 'size', label: `면적: ${m[1]}㎡ (${fmt(+m[1] / PY, 1)}평)` }); }
-  m = raw.match(/(\d+(?:\.\d+)?)\s*(m|미터|mm)?\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*(m|미터|mm)?/);
-  if (m) { let a = +m[1], b = +m[3]; if (a < 100) { a *= 1000; b *= 1000; } spec.W = r100(Math.max(a, b)); spec.D = r100(Math.min(a, b)); spec.areaPy = spec.W * spec.D / 1e6 / PY * (isMulti(spec) ? 1 : spec.floors); tokens.push({ word: m[0], cat: 'size', label: `크기: ${fmt(spec.W)} × ${fmt(spec.D)} mm` }); }
+  m = houseSeg(/(\d+(?:\.\d+)?)\s*(m|미터|mm)?\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*(m|미터|mm)?/);
+  if (m) { let a = +m[1], b = +m[3]; if (a < 100) { a *= 1000; b *= 1000; } spec.W = r100(Math.max(a, b)); spec.D = r100(Math.min(a, b)); spec.areaPy = spec.W * spec.D / 1e6 / PY; spec.areaMode = 'floor'; tokens.push({ word: m[0], cat: 'size', label: `크기: ${fmt(spec.W)} × ${fmt(spec.D)} mm` }); }
   m = raw.match(/가로\s*(\d+(?:\.\d+)?)\s*(m|미터|mm)?.{0,6}?세로\s*(\d+(?:\.\d+)?)\s*(m|미터|mm)?/);
-  if (m) { let a = +m[1], b = +m[3]; if (a < 100) a *= 1000; if (b < 100) b *= 1000; spec.W = r100(a); spec.D = r100(b); spec.areaPy = a * b / 1e6 / PY * (isMulti(spec) ? 1 : spec.floors); tokens.push({ word: m[0], cat: 'size', label: `크기: 가로 ${fmt(spec.W)} × 세로 ${fmt(spec.D)} mm` }); }
+  if (m) { let a = +m[1], b = +m[3]; if (a < 100) a *= 1000; if (b < 100) b *= 1000; spec.W = r100(a); spec.D = r100(b); spec.areaPy = a * b / 1e6 / PY; spec.areaMode = 'floor'; tokens.push({ word: m[0], cat: 'size', label: `크기: 가로 ${fmt(spec.W)} × 세로 ${fmt(spec.D)} mm` }); }
 
   // 지붕·높이
   for (const [re, k] of [[/박공|맞배|삼각\s*지붕|뾰족\s*지붕/, 'gable'], [/모임\s*지붕|우진각|모임/, 'hip'], [/외쪽|편경사|모노|한쪽\s*경사|경사\s*지붕|기울어진\s*지붕/, 'shed'], [/평지붕|평\s*슬래브|플랫|평면\s*지붕|옥상/, 'flat']]) if (hit(re, 'roof', '지붕: ' + ROOF_NAMES[k])) { spec.roof = k; break; }
@@ -532,6 +570,7 @@ function parseSentence(text) {
   m = raw.match(new RegExp('(?:공용\\s*)?(?:욕실|화장실)\\s*' + NUMPAT + '\\s*개?'));
   if (m && toNum(m[1]) != null) { spec.baths = clamp(toNum(m[1]), 0, 3); tokens.push({ word: m[0], cat: 'room', label: `욕실 ${spec.baths}개` }); }
   else if (/욕실|화장실/.test(t)) spec.baths = 1; else if (/창고/.test(t)) spec.baths = 0;
+  const bathGiven = !!(m && toNum(m[1]) != null);
 
   // 팬트리·부속
   if (hit(/주방\s*(?:쪽|옆)?\s*팬트리|팬트리\s*(?:는|를|은)?\s*주방/, 'room', '팬트리 (주방 쪽)')) spec.pantry = 'kitchen';
@@ -547,7 +586,7 @@ function parseSentence(text) {
 
   // 방별 내용 (조각 단위)
   const NAMES = [[/안방|부부\s*방|부부\s*침실|큰\s*방|주\s*침실|마스터\s*룸/, 'master'], [/아이\s*방|자녀\s*방|아들\s*방|딸\s*방|게스트\s*룸|손님\s*방|애기\s*방/, 'bed'], [/서재|작업실|공부방|취미방|게임방|홈\s*오피스|오피스|운동방|음악실/, 'other']];
-  const segs = raw.split(/[,.\n;]|그리고|이고|이며|이구요|구요|하고(?=\s)|있고/).map(s => s.trim()).filter(Boolean);
+  const segs = raw.split(/[,\n;]|\.(?!\d)|그리고|이고|이며|이구요|구요|하고(?=\s)|있고/).map(s => s.trim()).filter(Boolean);
   const rooms = [];
   for (const s of segs) {
     let kind = null, name = null, nm = null;
@@ -565,6 +604,7 @@ function parseSentence(text) {
       if (/드레스\s*룸|드레스실|옷방|워크인/.test(s) && same.kind !== 'other') { same.dress = true; tokens.push({ word: s.match(/드레스\s*룸|드레스실|옷방|워크인/)[0], cat: 'room', label: `${name}에 드레스룸` }); }
       if (/(전용|독립|부부|안방)\s*(욕실|화장실)|딸린/.test(s) && same.kind !== 'other') { same.ensuite = true; tokens.push({ word: (s.match(/(전용|독립|부부|안방)\s*(욕실|화장실)/) || ['전용 욕실'])[0], cat: 'room', label: `${name}에 전용 욕실` }); }
       if (/슬라이딩|미닫이|미서기|포켓/.test(s)) same.sliding = true;
+      const sz2 = roomSizeIn(s); if (sz2) same.size = { w: sz2.w, d: sz2.d };
       continue;
     }
     if (!name && !furnProbe.length && /드레스|전용|독립|딸린/.test(s) && !/방\s*(하나|한|두|다른|나머지)/.test(s)) {
@@ -575,6 +615,9 @@ function parseSentence(text) {
     if (!kind) kind = fr.some(f => catById(f.id).kind === 'bed') ? (rooms.some(r => r.kind === 'master') ? 'bed' : 'master') : (fr.length ? 'other' : 'bed');
     if (kind === 'other' && fr.some(f => catById(f.id).kind === 'bed')) kind = 'bed';
     const r = newRoom(kind, { name: name, furn: fr.length ? fr : null });
+    const sz = (nm || !HOUSEWORD.test(s)) ? roomSizeIn((nm ? s.slice(nm.index) : s).replace(/[1-5]\s*층/g, '')) : null;
+    if (sz) { r.size = { w: sz.w, d: sz.d }; tokens.push({ word: sz.word, cat: 'size', label: `${name || ROOM_KINDS[kind]} 크기 ${fmt(sz.w)}×${fmt(sz.d)}` }); }
+    const flm = s.match(/([1-5])\s*층/); if (flm && !isMulti(spec)) r.floor = +flm[1];
     const dm = s.match(/드레스\s*룸|드레스실|옷방|워크인/);
     if (dm && kind !== 'other') { r.dress = true; tokens.push({ word: dm[0], cat: 'room', label: `${r.name || ROOM_KINDS[kind]}에 드레스룸` }); }
     const em = s.match(/(전용|독립|부부|안방)\s*(욕실|화장실)|(욕실|화장실)\s*(이|가)?\s*딸린|딸린\s*(욕실|화장실)/);
@@ -591,24 +634,31 @@ function parseSentence(text) {
   if (rooms.length && !rooms.some(r => r.kind === 'master')) rooms[0].kind = 'master';
   spec.rooms = rooms;
 
+  if (!bathGiven && spec.floors > 1 && !isMulti(spec)) spec.baths = Math.min(3, spec.floors);
   if (spec.type === '농막' && spec.areaPy > 6.05) warn.push('농막은 연면적 20㎡(약 6평) 이하가 일반적 기준입니다.');
   if (!/평|㎡|m2|제곱|헤베|[x×X*]|가로/.test(raw)) warn.push('면적이 없어 15평으로 만들었습니다.');
+  if (spec.floors > 1 && !isMulti(spec) && spec.areaMode === 'floor' && tokens.some(x => x.cat === 'size')) warn.push(`면적 ${fmt(spec.areaPy, 0)}평을 층마다 적용했습니다 (연면적 ${fmt(spec.areaPy * spec.floors, 0)}평). 전체 면적이면 ‘연면적 ${fmt(spec.areaPy, 0)}평’으로 적어 주세요.`);
   normalizeSpec(spec, warn);
   return { spec, tokens, warn };
 }
 
-/** 범위 보정 + 면적별 방 개수 상한 */
+/** 범위 보정 (방 개수 상한은 그리기 전 확인에서 처리) */
 function normalizeSpec(spec, warn = []) {
   spec.floors = clamp(spec.floors | 0 || 1, 1, MAX_FLOORS);
+  if (!spec.areaMode) spec.areaMode = 'floor';
+  if (spec.areaMode === 'total' && !isMulti(spec)) { const per = spec.areaPy / spec.floors; if (per > MAX_PY) { warn.push(`한 층이 ${MAX_PY}평을 넘어 층당 ${MAX_PY}평으로 맞췄습니다.`); spec.areaPy = MAX_PY * spec.floors; } }
+  else { if (spec.areaPy > MAX_PY) { spec.areaPy = MAX_PY; warn.push(`${isMulti(spec) ? '한 세대' : '한 층'}은 최대 ${MAX_PY}평까지 만듭니다.`); } }
   if (spec.areaPy < 5) { spec.areaPy = 5; warn.push('면적이 너무 작아 5평으로 맞췄습니다.'); }
-  if (spec.areaPy > MAX_PY) { spec.areaPy = MAX_PY; warn.push(`최대 ${MAX_PY}평까지 만듭니다.`); }
-  if (!isMulti(spec) && floorArea(spec) < 6) { spec.floors = Math.max(1, Math.floor(spec.areaPy / 6)); warn.push(`한 층이 너무 작아 ${spec.floors}층으로 줄였습니다.`); }
-  const cap = roomCap(spec);
-  if (spec.rooms.length > cap) { warn.push(`이 면적에는 방을 최대 ${cap}개까지 넣을 수 있어 ${spec.rooms.length - cap}개를 뺐습니다.`); spec.rooms = spec.rooms.slice(0, cap); }
+  if (spec.areaMode === 'each') { spec.floorPy = [...Array(spec.floors)].map((_, i) => clamp((spec.floorPy && spec.floorPy[i]) || spec.areaPy, 5, MAX_PY)); }
+  else spec.floorPy = null;
+  if (!isMulti(spec) && floorPys(spec).some(p => p < 6) && spec.floors > 1) { warn.push('한 층이 6평보다 작으면 계단을 넣기 어렵습니다.'); }
   if (spec.floors < 2) spec.piloti = false;
+  if (!STAIRS[spec.stair]) spec.stair = 'U';
+  spec.livingFloors = (spec.livingFloors && spec.livingFloors.length ? spec.livingFloors : [1]).filter(f => f >= 1 && f <= spec.floors);
+  if (!spec.livingFloors.length) spec.livingFloors = [1];
+  spec.rooms.forEach(r => { if (r.floor > spec.floors) r.floor = 0; });
   return spec;
 }
-
 function highlightSentence(text, tokens) {
   let html = esc(text); const seen = new Set();
   for (const tk of [...tokens].sort((a, b) => b.word.length - a.word.length)) {
@@ -626,9 +676,9 @@ async function aiParse(text) {
   const conf = aiConf(); if (!conf.key) throw new Error('nokey');
   const cat = catalog().map(c => `${c.id}:${c.name}`).join(', ');
   const sys = `너는 건축 평면 사양 추출기다. 한국어 문장을 아래 JSON 하나로만 답한다. 설명·코드블록 금지.
-{"type":"전원주택|단독주택|빌라|농막|세컨하우스|원룸형|창고|주택","areaPy":숫자(5~50, 빌라는 한 세대 면적, 주택은 전체 연면적),"floors":1~5,"piloti":bool,"roof":"gable|hip|shed|flat","pitch":숫자,"H":실내높이mm,"baths":공용욕실수 0~3,"pantry":"none|entry|kitchen","utility":bool,"deck":bool,"tub":bool,"wallMat":"stucco|brick|wood|metal|concrete","roofMat":"metal|tile|shingle|zinc",
-"rooms":[{"kind":"master|bed|other","name":"방 이름 또는 null","furn":[{"id":"가구id","n":개수}] 또는 null,"dress":bool,"ensuite":bool,"sliding":bool}],"extra":[{"id":"가구id","n":개수}]}
-master=안방, bed=침대를 쓰는 방, other=서재·작업실 같은 그외 방. ensuite=그 방 전용 욕실, dress=그 방에 딸린 드레스룸. extra=거실·주방에 놓을 가구. 말하지 않은 값은 기본값을 쓴다. 가구 id 목록: ${cat}`;
+{"type":"전원주택|단독주택|빌라|농막|세컨하우스|원룸형|창고|주택","areaPy":숫자(5~50, 빌라는 한 세대 면적, 주택은 한 층 면적),"areaMode":"floor|total|each","floorPy":[층별 평수] 또는 null,"floors":1~5,"piloti":bool,"stair":"U|L|I|O (ㄷ자|ㄴ자|일자|원형)","livingFloors":[거실 둘 층 번호들],"roof":"gable|hip|shed|flat","pitch":숫자,"H":실내높이mm,"baths":공용욕실수 0~3,"pantry":"none|entry|kitchen","utility":bool,"deck":bool,"tub":bool,"wallMat":"stucco|brick|wood|metal|concrete","roofMat":"metal|tile|shingle|zinc",
+"rooms":[{"kind":"master|bed|other","name":"방 이름 또는 null","floor":층번호 또는 0,"size":{"w":가로mm,"d":세로mm} 또는 null,"furn":[{"id":"가구id","n":개수}] 또는 null,"dress":bool,"ensuite":bool,"sliding":bool}],"extra":[{"id":"가구id","n":개수}]}
+그냥 "N평"이고 2층 이상 주택이면 층마다 N평(areaMode floor)이다. "연면적/전체 N평"이면 total. master=안방, bed=침대를 쓰는 방, other=서재·작업실 같은 그외 방. ensuite=그 방 전용 욕실, dress=그 방에 딸린 드레스룸. extra=거실·주방에 놓을 가구. 말하지 않은 값은 기본값을 쓴다. 가구 id 목록: ${cat}`;
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': conf.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
     body: JSON.stringify({ model: conf.model || 'claude-haiku-5-5', max_tokens: 1500, system: sys, messages: [{ role: 'user', content: text }] })
@@ -638,14 +688,15 @@ master=안방, bed=침대를 쓰는 방, other=서재·작업실 같은 그외 �
   const out = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').replace(/```json|```/g, '').trim();
   const j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
   const spec = defaultSpec();
-  for (const k of ['type', 'roof', 'pantry', 'wallMat', 'roofMat']) if (typeof j[k] === 'string') spec[k] = j[k];
+  for (const k of ['type', 'roof', 'pantry', 'wallMat', 'roofMat', 'areaMode', 'stair']) if (typeof j[k] === 'string') spec[k] = j[k];
+  if (Array.isArray(j.floorPy)) spec.floorPy = j.floorPy.map(Number); if (Array.isArray(j.livingFloors)) spec.livingFloors = j.livingFloors.map(Number);
   for (const k of ['areaPy', 'floors', 'pitch', 'H', 'baths']) if (j[k] != null && isFinite(+j[k])) spec[k] = +j[k];
   for (const k of ['piloti', 'utility', 'deck', 'tub']) spec[k] = !!j[k];
   if (!ROOF_NAMES[spec.roof]) spec.roof = 'gable'; if (!WALL_MATS[spec.wallMat]) spec.wallMat = 'stucco'; if (!ROOF_MATS[spec.roofMat]) spec.roofMat = 'metal';
-  if (!['none', 'entry', 'kitchen'].includes(spec.pantry)) spec.pantry = 'none';
-  spec.H = clamp(r100(spec.H || 2700), 2200, 4500); spec.baths = clamp(spec.baths | 0, 0, 3);
+  if (!['none', 'entry', 'kitchen'].includes(spec.pantry)) spec.pantry = 'none'; if (!['floor', 'total', 'each'].includes(spec.areaMode)) spec.areaMode = 'floor';
+  spec.H = clamp(r100(spec.H || 2700), 2200, 4500); spec.baths = clamp(spec.baths | 0, 0, 3); spec.floors = clamp(spec.floors | 0 || 1, 1, MAX_FLOORS);
   const okF = l => (Array.isArray(l) ? l : []).filter(f => f && catById(f.id)).map(f => ({ id: f.id, n: clamp(+f.n || 1, 1, 6) }));
-  spec.rooms = (Array.isArray(j.rooms) ? j.rooms : []).map(r => newRoom(ROOM_KINDS[r.kind] ? r.kind : 'bed', { name: r.name || null, furn: okF(r.furn).length ? okF(r.furn) : null, dress: r.dress, ensuite: r.ensuite, sliding: r.sliding }));
+  spec.rooms = (Array.isArray(j.rooms) ? j.rooms : []).map(r => newRoom(ROOM_KINDS[r.kind] ? r.kind : 'bed', { name: r.name || null, furn: okF(r.furn).length ? okF(r.furn) : null, dress: r.dress, ensuite: r.ensuite, sliding: r.sliding, floor: +r.floor || 0, size: r.size && +r.size.w > 1000 && +r.size.d > 1000 ? { w: r100(+r.size.w), d: r100(+r.size.d) } : null }));
   spec.extra = okF(j.extra);
   const warn = []; normalizeSpec(spec, warn);
   return { spec, tokens: [], warn, ai: true };
@@ -842,74 +893,149 @@ function win(wall, center, width, z0, z1, extra) { return op(wall, center - widt
 function inner(m, r) { const e = (v, lim) => (v === 0 || v === lim ? 100 : 50); return { x0: r.x0 + e(r.x0, m.W), x1: r.x1 - e(r.x1, m.W), y0: r.y0 + e(r.y0, m.D), y1: r.y1 - e(r.y1, m.D) }; }
 const F = (m, kind, x0, y0, x1, y1, h, extra = {}) => m.furn.push({ kind, x0, y0, x1, y1, h, ...extra });
 
-/* ================= 건물 전체 ================= */
-function layoutPlan(spec) {
-  const warn = [], multi = isMulti(spec), N = spec.floors, FF = spec.H + 300;
-  const core = N > 1 ? (multi ? 2600 : 2400) : 0;
-  const pf = floorArea(spec), A = pf * PY * 1e6;
-  // 층별 방 나누기
-  const floorsRooms = [...Array(N)].map(() => []);
-  const unitLevels = multi ? [...Array(N).keys()].filter(i => !(spec.piloti && i === 0)) : null;
-  if (multi) unitLevels.forEach(i => floorsRooms[i] = spec.rooms);
-  else if (N === 1) floorsRooms[0] = spec.rooms;
-  else {
-    const fixed = spec.rooms.filter(r => r.floor >= 1 && r.floor <= N), free = spec.rooms.filter(r => !(r.floor >= 1 && r.floor <= N));
-    fixed.forEach(r => floorsRooms[r.floor - 1].push(r));
-    const per = Math.ceil(spec.rooms.length / N);
-    for (const r of free) {
-      let lv = -1;
-      for (let i = 1; i < N; i++) if (floorsRooms[i].length < per) { lv = i; break; }
-      if (lv < 0) lv = 0;
-      floorsRooms[lv].push(r);
-    }
-  }
-  // 외곽 크기
-  let W = spec.W, D = spec.D;
-  if (!W || !D) {
-    const ratio = A < 45e6 ? 1.25 : 1.33;
-    D = r100(Math.sqrt(A / ratio));
-    let Wu = multi ? r100(A / D) : r100(A / D) - core;
-    let req = 0;
-    floorsRooms.forEach((rs, i) => {
-      const s = rs.reduce((t, r) => t + Math.max(MINW[r.kind], reqWidth(r)) + (r.dress ? MINW.dress : 0) + (r.ensuite ? MINW.ensuite : 0), 0) + (rs.length ? MINW.bath : 0) + (spec.utility && i === 0 ? MINW.util : 0);
-      req = Math.max(req, s);
-    });
-    if (req > Wu) { const area = Wu * D; const nd = r100(area / req); if (nd >= (N > 1 ? 6000 : 6300)) { Wu = r100(req); D = nd; } else { Wu = r100(area / (N > 1 ? 6000 : 6300)); D = N > 1 ? 6000 : 6300; } }
-    if (N > 1) D = Math.max(D, 5400);
-    W = Wu + core;
-    if (W / D > 2.4 && N < MAX_FLOORS && !multi) warn.push('가로로 아주 긴 집이 됩니다. 층수를 늘리면 더 자연스럽습니다.');
-  }
-  W = Math.max(W, 4200 + core); D = Math.max(D, 3600);
-  const m = { W, D, H: spec.H, FF, spec, core, floors: [], warn, deck: null };
-  for (let i = 0; i < N; i++) {
-    const fs = { ...spec, rooms: floorsRooms[i] };
-    let role;
-    if (multi) role = spec.piloti && i === 0 ? 'piloti' : 'unit';
-    else role = N === 1 ? 'single' : i === 0 ? 'house1' : 'houseUp';
-    if (role === 'houseUp') { fs.pantry = 'none'; fs.utility = false; fs.baths = floorsRooms[i].length ? 1 : 0; fs.extra = []; }
-    if (role === 'house1') { fs.baths = Math.max(1, spec.baths - (N - 1)); if (!floorsRooms[0].length && fs.pantry === 'entry') fs.pantry = 'kitchen'; if (fs.pantry === 'entry') fs.pantry = 'kitchen'; }
-    const fm = role === 'piloti' ? layoutPiloti(m) : layoutFloor(m, fs, role);
-    fm.level = i; fm.name = `${i + 1}층`; fm.role = role; fm.z0 = i * FF;
-    m.floors.push(fm);
-    warn.push(...fm.warn.map(w => N > 1 ? `${i + 1}층: ${w}` : w));
-  }
-  if (spec.deck && !(multi && spec.piloti)) { const f0 = m.floors[0]; m.deck = { x0: r100((f0.livingX0 ?? core) + 200), x1: r100(W - 200), y0: -2400, y1: -100 }; }
-  m.area = W * D / 1e6; m.totalArea = m.area * N;
-  m.rooms = m.floors.flatMap(f => f.rooms.map(r => ({ ...r, level: f.level })));
-  return m;
+/* ================= 계단 ================= */
+function stairSpec(type, FF, multi) {
+  const n = Math.ceil(FF / 180), R = FF / n, T = 260, w = multi ? 1200 : 1050;
+  if (type === 'I') return { type, n, R, T, w, cw: Math.max(1900, w + 900), sw: w, len: (n - 1) * T + 900 };
+  if (type === 'L') { const n1 = Math.ceil(n * 0.6), n2 = n - n1; return { type, n, R, T, w, n1, n2, cw: r100(w + n2 * T + 300), sw: w + n2 * T, len: n1 * T + w }; }
+  if (type === 'O') { const dia = multi ? 2400 : 2000; return { type, n, R, T, w, cw: dia + 400, sw: dia, len: dia, dia }; }
+  const n1 = Math.ceil(n / 2), n2 = n - n1; return { type: 'U', n, R, T, w, n1, n2, cw: 2 * w + 300, sw: 2 * w + 100, len: n1 * T + w };
 }
 
+/* ================= 이슈(그리기 전 확인 항목) ================= */
+function addIssue(list, msg, fixes = [], extra = {}) { list.push({ id: uid(), msg, fixes, ...extra }); }
+const fxArea = (spec, fi, extraPy) => { const cur = floorPys(spec)[fi || 0], py = Math.min(MAX_PY, Math.ceil(cur + extraPy)); return py > cur ? { label: `${spec.areaMode === 'each' ? (fi + 1) + '층 ' : isMulti(spec) ? '세대 ' : spec.floors > 1 ? '층당 ' : ''}면적 ${fmt(cur, 0)}→${py}평`, act: { t: 'area', fi: fi || 0, py }, input: { t: 'area', fi: fi || 0, unit: '평', value: py } } : null; };
+const fxFloors = spec => spec.floors < MAX_FLOORS && !isMulti(spec) ? { label: `${spec.floors + 1}층으로 늘리기`, act: { t: 'floors', n: spec.floors + 1 } } : null;
+function applyFix(spec, act, val) {
+  const R = id => spec.rooms.find(r => r.id === id);
+  switch (act.t) {
+    case 'area': { const py = clamp(val ?? act.py, 5, MAX_PY); if (isMulti(spec) || spec.areaMode === 'floor') spec.areaPy = py; else if (spec.areaMode === 'total') spec.areaPy = py * spec.floors; else { spec.floorPy[act.fi] = py; } spec.W = spec.D = null; break; }
+    case 'floors': spec.floors = act.n; break;
+    case 'roomDel': spec.rooms = spec.rooms.filter(r => r.id !== act.id); break;
+    case 'roomsTrim': spec.rooms = spec.rooms.slice(0, act.n); break;
+    case 'roomSet': if (R(act.id)) R(act.id)[act.key] = act.val; break;
+    case 'roomSize': if (R(act.id)) R(act.id).size = act.w ? { w: act.w, d: act.d } : null; break;
+    case 'furnDel': { const r = R(act.id); if (r) { r.furn = (r.furn || defaultFurn(r.kind)).map(f => ({ ...f })); const f = r.furn.find(x => x.id === act.fid); if (f) { f.n--; if (f.n <= 0) r.furn = r.furn.filter(x => x !== f); } } else if (act.id === 'extra') { const f = spec.extra.find(x => x.id === act.fid); if (f) { f.n--; if (f.n <= 0) spec.extra = spec.extra.filter(x => x !== f); } } break; }
+    case 'furnSwap': { const r = R(act.id); if (r && r.furn) { const f = r.furn.find(x => x.id === act.fid); if (f) f.id = act.to; } break; }
+    case 'set': spec[act.key] = act.val; break;
+  }
+  normalizeSpec(spec); return spec;
+}
+const SMALLER_BED = { bed_k: 'bed_q', bed_q: 'bed_d', bed_d: 'bed_ss', bed_ss: 'bed_s' };
+
+/* ================= 건물 전체 ================= */
+function layoutPlan(spec) {
+  const warn = [], issues = [], multi = isMulti(spec), N = spec.floors, FF = spec.H + 300;
+  const pys = floorPys(spec);
+  let st = N > 1 ? stairSpec(spec.stair, FF, multi) : null;
+  const core = st ? Math.max(st.cw, multi ? 2600 : 1900) : 0;
+  // 방 개수 상한
+  let rooms = spec.rooms;
+  const cap = roomCap(spec);
+  if (rooms.length > cap) {
+    let need = floorPys(spec)[0]; const s2 = clone2(spec);
+    for (let k = 0; k < 60 && roomCap(s2) < rooms.length && need < MAX_PY; k++) { need++; applyFix(s2, { t: 'area', fi: 0, py: need }); if (s2.areaMode === 'each') s2.floorPy = s2.floorPy.map(() => need); }
+    addIssue(issues, `방 ${rooms.length}개는 이 면적에서 최대 ${cap}개까지 넣을 수 있습니다. 이대로 그리면 ${rooms.length - cap}개를 뺍니다.`,
+      [roomCap(s2) >= rooms.length ? { label: `면적 ${need}평으로 늘려 모두 넣기`, act: { t: 'area', fi: 0, py: need, all: true }, input: { t: 'area', fi: 0, unit: '평', value: need } } : null, fxFloors(spec), { label: `방 ${cap}개로 줄이기`, act: { t: 'roomsTrim', n: cap } }].filter(Boolean), { kind: 'cap' });
+    rooms = rooms.slice(0, cap);
+  }
+  // 층 역할
+  const roles = [...Array(N)].map((_, i) => multi ? (spec.piloti && i === 0 ? 'piloti' : 'unit') : N === 1 ? 'single' : livingOn(spec, i) ? 'living' : 'rooms');
+  const kitchenFloor = roles.findIndex(r => r === 'living' || r === 'single' || r === 'unit');
+  // 층별 방 나누기
+  const floorsRooms = [...Array(N)].map(() => []);
+  if (multi) roles.forEach((r, i) => { if (r === 'unit') floorsRooms[i] = rooms; });
+  else if (N === 1) floorsRooms[0] = rooms;
+  else {
+    const capF = pys.map((p, i) => roles[i] === 'living' ? maxRooms(p) : maxRoomsNoLiving(p));
+    rooms.filter(r => r.floor >= 1 && r.floor <= N).forEach(r => floorsRooms[r.floor - 1].push(r));
+    const order = [...Array(N).keys()].sort((a, b) => (roles[a] === 'rooms' ? 0 : 1) - (roles[b] === 'rooms' ? 0 : 1) || b - a);
+    const free = rooms.filter(r => !(r.floor >= 1 && r.floor <= N));
+    const pool = order.filter(i => roles[i] === 'rooms').length ? order.filter(i => roles[i] === 'rooms') : order;
+    let k = 0;
+    for (const r of free) {
+      let lv = null;
+      for (let t = 0; t < pool.length; t++) { const i = pool[(k + t) % pool.length]; if (floorsRooms[i].length < capF[i]) { lv = i; k = (k + t + 1) % pool.length; break; } }
+      if (lv == null) lv = order.find(i => floorsRooms[i].length < capF[i]);
+      if (lv == null) lv = order.reduce((b, i) => capF[i] - floorsRooms[i].length > capF[b] - floorsRooms[b].length ? i : b, order[0]);
+      floorsRooms[lv].push(r);
+    }
+    roles.forEach((r, i) => { if (r === 'rooms' && !floorsRooms[i].length) addIssue(issues, `${i + 1}층에 거실도 방도 없어 복도와 계단만 생깁니다.`, [{ label: `${i + 1}층에 거실 넣기`, act: { t: 'set', key: 'livingFloors', val: [...spec.livingFloors, i + 1] } }]); });
+  }
+  // 욕실 나누기 (주택 다층)
+  const baths = [...Array(N)].map(() => 0);
+  if (multi || N === 1) baths.fill(spec.baths);
+  else {
+    let left = spec.baths;
+    const want = [...Array(N).keys()].filter(i => i === 0 || floorsRooms[i].length);
+    for (const i of want) if (left > 0) { baths[i]++; left--; }
+    while (left > 0) { const i = want.reduce((b, k) => floorsRooms[k].length - baths[k] > floorsRooms[b].length - baths[b] ? k : b, want[0]); baths[i]++; left--; }
+    want.forEach(i => { if (!baths[i] && floorsRooms[i].length) addIssue(issues, `${i + 1}층에 방이 있는데 공용 욕실이 없습니다.`, [{ label: `공용 욕실 ${spec.baths + 1}개로`, act: { t: 'set', key: 'baths', val: spec.baths + 1 } }]); });
+  }
+  // 외곽 크기: 깊이 D는 공통, 폭은 층별 면적에 맞춤
+  const Amax = Math.max(...pys) * PY * 1e6, ratio = Amax < 45e6 ? 1.25 : 1.33, same = pys.every(p => p === pys[0]);
+  let D = spec.D || r100(Math.sqrt(Amax / ratio));
+  if (st) D = Math.max(D, st.len + 1500 + 100);
+  const Ws = pys.map(p => spec.W && N === 1 ? spec.W : r100(p * PY * 1e6 / D) + (multi ? core : 0));
+  if (same && !spec.W && N === 1) {
+    const rs = floorsRooms[0], req = rs.reduce((t, r) => t + Math.max(MINW[r.kind], reqWidth(r), r.size ? r.size.w : 0) + (r.dress ? MINW.dress : 0) + (r.ensuite ? MINW.ensuite : 0), 0) + (rs.length && spec.baths ? MINW.bath : 0) + (spec.utility ? MINW.util : 0);
+    const area = Ws[0] * D;
+    if (req > Ws[0]) { const nd = r100(area / req); if (nd >= 6300) { Ws[0] = r100(req); D = nd; } else if (D > 6300) { Ws[0] = r100(area / 6300); D = 6300; } }
+    if (Ws[0] / D > 2.4) warn.push('가로로 아주 긴 집이 됩니다. 층수를 늘리면 더 자연스럽습니다.');
+  }
+  for (let i = 0; i < N; i++) Ws[i] = Math.max(Ws[i], (roles[i] === 'piloti' ? 4200 : 4200) + core);
+  if (st && st.type !== 'U' && D < st.len + 1500) { addIssue(issues, `${STAIRS[st.type]} 계단은 깊이가 ${fmt(st.len + 1500)}mm 필요해 ㄷ자로 바꿨습니다.`, [{ label: 'ㄷ자 계단으로 확정', act: { t: 'set', key: 'stair', val: 'U' } }]); st = stairSpec('U', FF, multi); }
+  const M = { W: Math.max(...Ws), D, H: spec.H, FF, spec, core, st, floors: [], warn, issues, deck: null, names: { bed: 0, other: 0, bath: 0 }, Ws };
+  for (let i = 0; i < N; i++) {
+    const fs = { ...spec, rooms: floorsRooms[i], baths: baths[i] };
+    const role = roles[i];
+    if (!multi && N > 1) { if (i !== kitchenFloor) { fs.pantry = 'none'; fs.utility = false; fs.extra = []; } else if (fs.pantry === 'entry') fs.pantry = 'kitchen'; }
+    if (multi) M.names = { bed: 0, other: 0, bath: 0 };
+    const fm = role === 'piloti' ? layoutPiloti(M, Ws[i]) : layoutFloor(M, fs, role, Ws[i], i, i === kitchenFloor);
+    fm.level = i; fm.name = `${i + 1}층`; fm.role = role; fm.z0 = i * FF; fm.W = Ws[i];
+    M.floors.push(fm);
+    const pre = N > 1 ? `${i + 1}층: ` : '';
+    warn.push(...fm.warn.map(w => pre + w));
+    (fm.issues || []).forEach(x => { const same = issues.find(y => y.base === x.msg); if (same) { if (same.floorsList.includes(i + 1)) return; same.floorsList.push(i + 1); same.msg = `${same.floorsList.join('·')}층: ${x.msg}`; return; } x.base = x.msg; x.floorsList = [i + 1]; x.msg = pre + x.msg; issues.push(x); });
+  }
+  if (spec.deck && !(multi && spec.piloti)) { const f0 = M.floors[0]; M.deck = { x0: r100((f0.livingX0 ?? core) + 200), x1: r100(Ws[0] - 200), y0: -2400, y1: -100 }; }
+  M.floors.forEach(f => f.rooms.forEach(r => r.area = (r.x1 - r.x0) * (r.y1 - r.y0) / 1e6));
+  M.roofW = Ws[N - 1];
+  M.area = Ws[0] * D / 1e6; M.areas = Ws.map(w => w * D / 1e6); M.totalArea = M.areas.reduce((a, b) => a + b, 0);
+  M.rooms = M.floors.flatMap(f => f.rooms.map(r => ({ ...r, level: f.level })));
+  // 요청한 방 크기 확인
+  for (const r of M.rooms) if (r.rs && r.rs.size) {
+    const w = r.x1 - r.x0, d = r.y1 - r.y0, q = r.rs.size;
+    if (Math.abs(w - q.w) > 300 || Math.abs(d - q.d) > 300) {
+      const lack = Math.max(0, q.w - w) * Math.max(d, q.d) / (PY * 1e6) + Math.max(0, q.d - d) * w / (PY * 1e6);
+      addIssue(issues, `${r.name}: 원한 크기 ${fmt(q.w)}×${fmt(q.d)}, 실제 ${fmt(w)}×${fmt(d)} (벽 중심 기준)`,
+        [lack > 0.3 ? fxArea(spec, r.level, lack + 1) : null, { label: `실제 크기로 맞추기`, act: { t: 'roomSize', id: r.rs.id, w: r100(w), d: r100(d) } }, { label: '크기 자동', act: { t: 'roomSize', id: r.rs.id, w: 0 } }].filter(Boolean), { level: 'info' });
+    }
+  }
+  // 가구 문제
+  for (const r of M.rooms) if (r.fit && r.rs && r.rs.furn) {
+    for (const f of r.fit.fails) {
+      const fx = [{ label: `${f.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'furnDel', id: r.rs.id, fid: f.id } }];
+      if (SMALLER_BED[f.id]) fx.unshift({ label: `${catById(SMALLER_BED[f.id]).name}로 바꾸기`, act: { t: 'furnSwap', id: r.rs.id, fid: f.id, to: SMALLER_BED[f.id] } });
+      const w = r.x1 - r.x0, d = r.y1 - r.y0; fx.push({ label: `방 크기 ${fmt(w + 600)}×${fmt(d)}로 키우기`, act: { t: 'roomSize', id: r.rs.id, w: r100(w + 600), d: r100(d) } });
+      addIssue(issues, `${r.name}: ${f.label} — ${f.reason}`, fx, { level: 'furn' });
+    }
+    for (const f of r.fit.flow.filter(x => !x.ok)) addIssue(issues, `${r.name}: ${f.label} 앞까지 갈 통로(폭 500mm)가 막힘`, [{ label: `${f.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'furnDel', id: r.rs.id, fid: f.id } }, { label: '방 크기 600mm 키우기', act: { t: 'roomSize', id: r.rs.id, w: r100(r.x1 - r.x0 + 600), d: r100(r.y1 - r.y0) } }], { level: 'furn' });
+  }
+  for (const fm of M.floors) for (const ft of fm.fits || []) if (/거실|주방|가족실/.test(ft.name)) for (const f of ft.fails) addIssue(issues, `${fm.name} ${ft.name}: ${f.label} — ${f.reason}`, [{ label: `${f.label} 빼기`, act: { t: 'furnDel', id: 'extra', fid: f.id } }], { level: 'furn' });
+  return M;
+}
+const clone2 = o => JSON.parse(JSON.stringify(o));
+
 /* 한 층: 외곽 W×D 중 서쪽 core 폭은 계단실 */
-function layoutFloor(M, spec, role) {
-  const core = M.core, Wu = M.W - core;
-  const sm = { W: Wu, D: M.D, H: M.H, spec, rooms: [], walls: [], furn: [], warn: [], fits: [] };
-  const entry = role === 'unit' ? 'ownWest' : role === 'house1' ? 'core' : role === 'houseUp' ? 'none' : 'own';
-  const kitchen = role !== 'houseUp';
+function layoutFloor(M, spec, role, Wf, fi, kitchen) {
+  const core = M.core, Wu = Wf - core;
+  const sm = { W: Wu, D: M.D, H: M.H, spec, rooms: [], walls: [], furn: [], warn: [], fits: [], issues: [], fi, names: M.names };
   const compact = core === 0 && (spec.rooms.length === 0 || M.D < 5100 || Wu < 6900);
-  if (compact) layoutCompact(sm); else layoutNormal(sm, { entry, kitchen });
+  if (compact) layoutCompact(sm);
+  else if (role === 'rooms') layoutCorridor(sm);
+  else layoutNormal(sm, { entry: role === 'unit' ? 'ownWest' : role === 'single' ? 'own' : fi === 0 ? 'core' : 'none', kitchen: role === 'living' ? kitchen : true });
   if (!core) { sm.livingX0 = sm.livingX0 ?? 0; return sm; }
-  // 계단실을 붙이기: x를 core만큼 이동
-  const sx = v => v + core;
   sm.rooms.forEach(r => { r.x0 += core; r.x1 += core; if (r.bedBox) { r.bedBox.x0 += core; r.bedBox.x1 += core; } });
   sm.furn.forEach(f => { f.x0 += core; f.x1 += core; });
   sm.fits.forEach(f => { f.paths.forEach(p => p.forEach(q => q[0] += core)); });
@@ -920,50 +1046,136 @@ function layoutFloor(M, spec, role) {
   S.a = -100; N.a = -100;
   const mid = sm.walls.find(w => w.ext && w.o === 'v' && w.c === core);
   mid.ext = false; mid.ops = mid.ops.filter(o => o.kind !== 'window');
-  sm.W = M.W;
+  sm.W = Wf;
   const Wst = addWall(sm, 'v', 0, 100, M.D - 100, 200, true);
-  const stairY0 = M.D - 100 - 3300;
-  if (role === 'house1') {
-    op(mid, 300, Math.min(stairY0 - 200, 2300), 'open', 0, 2400);
+  const st = M.st, sy0 = M.D - 100 - st.len;
+  const hallTo = sm.corr ? null : [300, Math.min(sy0 - 200, 2300)];
+  if (sm.corr) {
+    if (sm.corr.y1 > sy0 + 1) sm.issues.push({ id: uid(), msg: '복도가 계단과 겹쳐 계단홀에서 바로 이어지지 않을 수 있습니다.', fixes: [{ label: 'ㄷ자 계단으로', act: { t: 'set', key: 'stair', val: 'U' } }] });
+    op(mid, sm.corr.y0 + 50, Math.min(sm.corr.y1 - 50, sy0), 'open', 0, 2400);
+  } else if (role !== 'unit') op(mid, hallTo[0], Math.max(hallTo[0] + 900, hallTo[1]), 'open', 0, 2400);
+  if (fi === 0 && role !== 'unit') {
     op(S, core / 2 - 450, core / 2 + 450, 'front', 0, 2250, { side: -1, hinge: 'a' });
-    sm.rooms.push({ key: 'core-entry', name: '현관', kind: 'entry', x0: 0, y0: 0, x1: core, y1: stairY0 + 100 });
-    F(sm, 'shoe', 100, 150, 450, Math.min(1500, stairY0 - 100), 1000);
-    sm.stepLine = { x: core - 50 - 0, y0: 100, y1: 1200, h: true, x0: 100, x1: core - 100, y: 1300 };
-  } else if (role === 'houseUp') {
-    op(mid, 300, Math.min(stairY0 - 200, 2300), 'open', 0, 2400);
-    sm.rooms.push({ key: 'core-hall', name: '계단홀', kind: 'entry', x0: 0, y0: 0, x1: core, y1: stairY0 + 100 });
-    win(S, core / 2, 900, 900, 2200);
+    sm.rooms.push({ key: 'core-entry', name: '현관', kind: 'entry', x0: 0, y0: 0, x1: core, y1: sy0 + 100 });
+    F(sm, 'shoe', 100, 150, 450, Math.min(1500, sy0 - 100), 1000);
+    sm.stepLine = { h: true, x0: 100, x1: core - 100, y: 1300 };
   } else if (role === 'unit') {
-    sm.rooms.push({ key: 'core-hall', name: '계단실', kind: 'core', x0: 0, y0: 0, x1: core, y1: stairY0 + 100, common: true });
+    sm.rooms.push({ key: 'core-hall', name: '계단실', kind: 'core', x0: 0, y0: 0, x1: core, y1: sy0 + 100, common: true });
     win(S, core / 2, 900, 1000, 2200);
+  } else {
+    sm.rooms.push({ key: 'core-hall', name: '계단홀', kind: 'entry', x0: 0, y0: 0, x1: core, y1: sy0 + 100 });
+    win(S, core / 2, 900, 900, 2200);
   }
-  sm.rooms.push({ key: 'core-stair', name: '계단', kind: 'stair', x0: 0, y0: stairY0 + 100, x1: core, y1: M.D, common: role === 'unit' });
-  sm.stair = { x0: 100, x1: core - 100, y0: stairY0, y1: M.D - 100 };
+  sm.rooms.push({ key: 'core-stair', name: '계단', kind: 'stair', x0: 0, y0: sy0 + 100, x1: core, y1: M.D, common: role === 'unit' });
+  sm.stair = { ...st, x0: core - 100 - st.sw, x1: core - 100, y0: sy0, y1: M.D - 100 };
   win(Wst, M.D - 1800, 900, 1100, 2000);
   return sm;
 }
 
 /* 필로티(1층 주차) */
-function layoutPiloti(M) {
-  const { W, D, core } = M;
-  const sm = { W, D, H: M.H, spec: M.spec, rooms: [], walls: [], furn: [], warn: [], fits: [], piloti: true };
-  const S = addWall(sm, 'h', 0, -100, core + 100, 200, true), N = addWall(sm, 'h', D, -100, core + 100, 200, true);
+function layoutPiloti(M, Wf) {
+  const { D, core } = M, W = Wf;
+  const sm = { W, D, H: M.H, spec: M.spec, rooms: [], walls: [], furn: [], warn: [], fits: [], issues: [], piloti: true };
+  const S = addWall(sm, 'h', 0, -100, core + 100, 200, true); addWall(sm, 'h', D, -100, core + 100, 200, true);
   addWall(sm, 'v', 0, 100, D - 100, 200, true); addWall(sm, 'v', core, 100, D - 100, 200, true);
   op(S, core / 2 - 500, core / 2 + 500, 'front', 0, 2250, { side: -1, hinge: 'a' });
-  const stairY0 = D - 100 - 3300;
-  sm.rooms.push({ key: 'core-hall', name: '공동현관', kind: 'core', x0: 0, y0: 0, x1: core, y1: stairY0 + 100, common: true });
-  sm.rooms.push({ key: 'core-stair', name: '계단', kind: 'stair', x0: 0, y0: stairY0 + 100, x1: core, y1: D, common: true });
-  sm.stair = { x0: 100, x1: core - 100, y0: stairY0, y1: D - 100 };
+  const st = M.st, sy0 = D - 100 - st.len;
+  sm.rooms.push({ key: 'core-hall', name: '공동현관', kind: 'core', x0: 0, y0: 0, x1: core, y1: sy0 + 100, common: true });
+  sm.rooms.push({ key: 'core-stair', name: '계단', kind: 'stair', x0: 0, y0: sy0 + 100, x1: core, y1: D, common: true });
+  sm.stair = { ...st, x0: core - 100 - st.sw, x1: core - 100, y0: sy0, y1: D - 100 };
   sm.rooms.push({ key: 'parking', name: '주차장 (필로티)', kind: 'parking', x0: core, y0: 0, x1: W, y1: D, open: true });
   const nx = Math.max(1, Math.ceil((W - core) / 6000)), ny = Math.max(1, Math.ceil(D / 6000));
-  for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
-    const x = core + (W - core) * i / nx, y = D * j / ny; if (i === 0 && (j === 0 || j === ny)) continue;
-    F(sm, 'column', x - 250, y - 250, x + 250, y + 250, M.FF - 300, { struct: true });
-  }
+  for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) { const x = core + (W - core) * i / nx, y = D * j / ny; if (i === 0 && (j === 0 || j === ny)) continue; F(sm, 'column', x - 250, y - 250, x + 250, y + 250, M.FF - 300, { struct: true }); }
   const n = Math.floor((W - core - 300) / 2500);
   for (let i = 0; i < n; i++) F(sm, 'stall', core + 300 + i * 2500, 200, core + 300 + (i + 1) * 2500, Math.min(5200, D - 300), 0, { no: i + 1 });
   sm.livingX0 = core;
   return sm;
+}
+
+/* ================= 거실 없는 층: 가운데 복도 + 양쪽 방 ================= */
+function roomName(m, kind, rs, parentName) {
+  if (kind === 'master') return rs.name || '안방';
+  if (kind === 'bed') return rs.name || `침실${++m.names.bed + 1}`;
+  if (kind === 'other') return rs.name || `방${++m.names.other}`;
+  if (kind === 'dress') return `${parentName || '안방'} 드레스룸`;
+  if (kind === 'ensuite') return `${parentName || '안방'} 욕실`;
+  return { util: '다용도실', pantry: '팬트리', bath: '욕실', storage: '다목적실' }[kind];
+}
+function bandItems(spec) {
+  const groups = [];
+  spec.rooms.forEach(rs => {
+    const g = [{ kind: rs.kind, rs, min: Math.max(MINW[rs.kind], reqWidth(rs), rs.size ? rs.size.w : 0), wt: WT[rs.kind], fixed: rs.size ? rs.size.w : 0, dReq: rs.size ? rs.size.d : 0 }];
+    if (rs.dress && rs.kind !== 'other') g.push({ kind: 'dress', parent: rs, min: MINW.dress, wt: WT.dress });
+    if (rs.ensuite && rs.kind !== 'other') g.push({ kind: 'ensuite', parent: rs, min: MINW.ensuite, wt: WT.ensuite });
+    groups.push(g);
+  });
+  for (let i = 0; i < spec.baths; i++) groups.push([{ kind: 'bath', min: MINW.bath, wt: WT.bath }]);
+  if (spec.utility) groups.push([{ kind: 'util', min: MINW.util, wt: WT.util }]);
+  return groups;
+}
+function allocBand(list, W) {
+  const fixed = new Set(list.map((x, k) => x.fixed ? k : -1).filter(k => k >= 0)); let widths = [];
+  for (let it = 0; it < 8; it++) {
+    const free = W - list.reduce((s, x, k) => s + (fixed.has(k) ? (x.fixed || x.min) : 0), 0), ws = list.reduce((s, x, k) => s + (fixed.has(k) ? 0 : x.wt), 0);
+    widths = list.map((x, k) => fixed.has(k) ? (x.fixed || x.min) : ws ? free * x.wt / ws : 0);
+    let ch = false; widths.forEach((w, k) => { if (!fixed.has(k) && w < list[k].min) { fixed.add(k); ch = true; } }); if (!ch) break;
+  }
+  const xs = [0]; let acc = 0; widths.forEach((w, k) => { acc = k === widths.length - 1 ? W : r100(acc + w); xs.push(acc); });
+  return xs;
+}
+function layoutCorridor(m) {
+  const { W, D, spec } = m, CW = 1200, st = null;
+  const out = outerWalls(m);
+  let groups = bandItems(spec);
+  const gw = g => g.reduce((s, x) => s + x.min, 0);
+  const bands = [[], []]; // 0: 북, 1: 남
+  [...groups].sort((a, b) => gw(b) - gw(a)).forEach(g => { const sum = b => b.flat().reduce((s, x) => s + x.min, 0); (sum(bands[0]) <= sum(bands[1]) ? bands[0] : bands[1]).push(g); });
+  // 넘치면 빼기
+  for (const b of bands) while (b.flat().reduce((s, x) => s + x.min, 0) > W && b.length) {
+    const g = b.pop(); const lack = gw(g);
+    addIssue(m.issues, `폭이 모자라 ${g[0].rs ? (g[0].rs.name || ROOM_KINDS[g[0].kind]) : roomName(m, g[0].kind, {})}을(를) 넣지 못했습니다.`, [fxArea(spec, m.fi, lack * D / 2 / (PY * 1e6) + 1), g[0].rs ? { label: '그 방 빼기', act: { t: 'roomDel', id: g[0].rs.id } } : null, fxFloors(spec)].filter(Boolean));
+    m.warn.push('폭이 모자라 방 하나를 넣지 못했습니다.');
+  }
+  // 복도 위치: 계단홀(core)에서 바로 이어지도록 계단 앞쪽까지
+  const dN = Math.max(0, ...bands[0].flat().map(x => x.dReq || 0)), dS = Math.max(0, ...bands[1].flat().map(x => x.dReq || 0));
+  let yc0 = r100((D - CW) / 2);
+  if (dS) yc0 = dS; else if (dN) yc0 = D - CW - dN;
+  const stLen = m.spec.floors > 1 ? stairSpec(m.spec.stair, m.H + 300, false).len : 0;
+  yc0 = clamp(yc0, 2400, D - CW - 2400);
+  if (stLen) yc0 = Math.min(yc0, D - 100 - stLen - CW);
+  if (yc0 < 2400) { yc0 = 0; if (bands[1].length) { bands[0].push(...bands[1]); bands[1] = []; addIssue(m.issues, '깊이가 모자라 방을 복도 한쪽에만 두었습니다.', [fxFloors(spec)].filter(Boolean)); } }
+  const yc1 = yc0 + CW;
+  m.corr = { y0: yc0, y1: yc1 };
+  m.rooms.push({ key: 'hall', name: '복도', kind: 'hall', x0: 0, y0: yc0, x1: W, y1: yc1 });
+  const wN = addWall(m, 'h', yc1, 100, W - 100, 100, false), wS = yc0 > 0 ? addWall(m, 'h', yc0, 100, W - 100, 100, false) : null;
+  win(out.E, (yc0 + yc1) / 2, 900, 900, 2200);
+  if (dN && D - yc1 < dN - 300 || dS && yc0 < dS - 300) m.warn.push('원한 방 깊이를 다 맞추지 못했습니다.');
+  bands.forEach((band, bi) => {
+    if (!band.length) return;
+    let list = band.flat();
+    const sumMin = list.reduce((s, x) => s + x.min, 0), allFixed = list.every(x => x.fixed || !x.rs && x.kind !== 'util');
+    if (W - sumMin >= 1500 && list.every(x => x.fixed || ['bath', 'ensuite', 'dress', 'util'].includes(x.kind))) list.push({ kind: 'storage', min: 1200, wt: 1, filler: true });
+    const xs = allocBand(list, W), north = bi === 0, y0 = north ? yc1 : 0, y1 = north ? D : yc0;
+    const parentRoom = {};
+    list.forEach((it, k) => {
+      const x0 = xs[k], x1 = xs[k + 1], w = x1 - x0; if (w < 300) return;
+      const name = roomName(m, it.kind, it.rs || {}, it.parent && parentRoom[it.parent.id]?.name);
+      const room = { key: it.kind + bi + '-' + k, name, kind: it.kind, x0, y0, x1, y1, rs: it.rs || null, parentId: it.parent?.id || null };
+      if (it.rs) parentRoom[it.rs.id] = room;
+      m.rooms.push(room);
+      if (k > 0) addWall(m, 'v', x0, north ? y0 + 50 : 100, north ? D - 100 : y1 - 50, 100, false);
+      const isRoom = ['master', 'bed', 'other', 'storage'].includes(it.kind), ext = north ? out.N : out.S;
+      if (isRoom) win(ext, (x0 + x1) / 2, clamp(r100(w * 0.5), 900, 2400), 900, 2200, { split: w * 0.5 > 1600 ? 2 : 1 });
+      else if (it.kind !== 'dress') win(ext, (x0 + x1) / 2, 600, 1500, 2100, { frosted: /bath|ensuite/.test(it.kind) });
+      if (it.parent) { const wall = m.walls[m.walls.length - 1]; const ya = north ? y0 + 150 : y1 - 850; op(wall, ya, ya + 700, 'door', 0, 2100, { side: 1, hinge: 'a' }); return; }
+      const dw = ['master', 'bed', 'other'].includes(it.kind) ? 900 : 800, hasChild = list[k + 1] && list[k + 1].parent === it.rs;
+      const a = hasChild || k === 0 ? x0 + 150 : x1 - 150 - dw;
+      const wall = north ? wN : wS;
+      if (wall) op(wall, a, a + dw, it.rs && it.rs.sliding ? 'sliding' : 'door', 0, 2100, { side: north ? 1 : -1, hinge: 'a' });
+      room.doorWest = true;
+    });
+  });
+  for (const r of m.rooms) furnishRoom(m, r);
 }
 
 /* ================= 일반형 한 층 ================= */
@@ -978,7 +1190,7 @@ function layoutNormal(m, o) {
   let list = [];
   let bathsLeft = spec.baths;
   spec.rooms.forEach((rs, i) => {
-    list.push({ kind: rs.kind, rs, min: Math.max(MINW[rs.kind], reqWidth(rs)), wt: WT[rs.kind] });
+    list.push({ kind: rs.kind, rs, min: Math.max(MINW[rs.kind], reqWidth(rs), rs.size ? rs.size.w : 0), wt: WT[rs.kind], fixed: rs.size ? rs.size.w : 0, dReq: rs.size ? rs.size.d : 0 });
     if (rs.dress && rs.kind !== 'other') list.push({ kind: 'dress', parent: rs, min: MINW.dress, wt: WT.dress });
     if (rs.ensuite && rs.kind !== 'other') list.push({ kind: 'ensuite', parent: rs, min: MINW.ensuite, wt: WT.ensuite });
     if (i === 0 && bathsLeft > 0) { list.push({ kind: 'bath', min: MINW.bath, wt: WT.bath }); bathsLeft--; }
@@ -990,30 +1202,30 @@ function layoutNormal(m, o) {
   while (bathsLeft-- > 0) list.push({ kind: 'bath', min: MINW.bath, wt: WT.bath });
   let pantry = spec.pantry;
   if (pantry === 'kitchen' && hasK) list.push({ kind: 'pantry', min: MINW.pantry, wt: WT.pantry });
-  const drop = (pred, msg, fix) => { const k = list.findIndex(pred); if (k >= 0) { list.splice(k, 1); warn.push(msg); fix && fix(); return true; } return false; };
+  const lackPy = () => (list.reduce((s, x) => s + x.min, 0) - W) * Math.max(2700, Math.min(3600, D / 2)) / (PY * 1e6) + 1;
+  const drop = (pred, msg, fix, fixes) => { const k = list.findIndex(pred); if (k >= 0) { const it = list[k]; const fx = [fxArea(spec, m.fi || 0, lackPy()), ...(fixes ? fixes(it) : []), fxFloors(spec)].filter(Boolean); list.splice(k, 1); warn.push(msg); addIssue(m.issues || (m.issues = []), msg, fx); fix && fix(); return true; } return false; };
   const sum = () => list.reduce((s, x) => s + x.min, 0);
   while (sum() > W) {
-    if (drop(x => x.kind === 'util', '폭이 모자라 다용도실을 뺐습니다.')) continue;
-    if (drop(x => x.kind === 'pantry', '폭이 모자라 팬트리를 현관 쪽으로 옮겼습니다.', () => pantry = own ? 'entry' : 'none')) continue;
-    if (drop(x => x.kind === 'dress', '폭이 모자라 드레스룸을 뺐습니다.', null)) continue;
-    if (drop(x => x.kind === 'bath' && list.filter(y => y.kind === 'bath').length > 1, '폭이 모자라 공용 욕실을 하나 줄였습니다.')) continue;
-    if (drop(x => x.kind === 'ensuite', '폭이 모자라 전용 욕실을 뺐습니다.')) continue;
-    const big = list.find(x => MINW[x.kind] && x.rs && x.min > MINW[x.kind]); if (big) { big.min = MINW[big.kind]; continue; }
-    const lastRoom = [...list].reverse().find(x => x.rs); if (lastRoom && list.filter(x => x.rs).length > 1) { list.splice(list.indexOf(lastRoom), 1); warn.push(`폭이 모자라 방(${lastRoom.rs.name || ROOM_KINDS[lastRoom.kind]})을 하나 뺐습니다.`); continue; }
+    if (drop(x => x.kind === 'util', '폭이 모자라 다용도실을 뺐습니다.', null, () => [{ label: '다용도실 없이', act: { t: 'set', key: 'utility', val: false } }])) continue;
+    if (drop(x => x.kind === 'pantry', '폭이 모자라 팬트리를 현관 쪽으로 옮겼습니다.', () => pantry = own ? 'entry' : 'none', () => [{ label: '현관 쪽 팬트리로', act: { t: 'set', key: 'pantry', val: 'entry' } }])) continue;
+    if (drop(x => x.kind === 'dress', '폭이 모자라 드레스룸을 뺐습니다.', null, it => [{ label: '드레스룸 없이', act: { t: 'roomSet', id: it.parent.id, key: 'dress', val: false } }])) continue;
+    if (drop(x => x.kind === 'bath' && list.filter(y => y.kind === 'bath').length > 1, '폭이 모자라 공용 욕실을 하나 줄였습니다.', null, () => [{ label: `공용 욕실 ${spec.baths - 1}개로`, act: { t: 'set', key: 'baths', val: Math.max(0, spec.baths - 1) } }])) continue;
+    if (drop(x => x.kind === 'ensuite', '폭이 모자라 전용 욕실을 뺐습니다.', null, it => [{ label: '전용 욕실 없이', act: { t: 'roomSet', id: it.parent.id, key: 'ensuite', val: false } }])) continue;
+    const big = list.find(x => MINW[x.kind] && x.rs && x.min > MINW[x.kind]); if (big) { if (big.fixed) addIssue(m.issues || (m.issues = []), `${big.rs.name || ROOM_KINDS[big.kind]}: 원한 폭 ${fmt(big.fixed)}mm가 들어가지 않습니다.`, [fxArea(spec, m.fi || 0, lackPy()), { label: '크기 자동', act: { t: 'roomSize', id: big.rs.id, w: 0 } }].filter(Boolean)); big.min = MINW[big.kind]; big.fixed = 0; continue; }
+    const lastRoom = [...list].reverse().find(x => x.rs); if (lastRoom && list.filter(x => x.rs).length > 1) { if (drop(x => x === lastRoom, `폭이 모자라 방(${lastRoom.rs.name || ROOM_KINDS[lastRoom.kind]})을 하나 뺐습니다.`, null, it => [{ label: '그 방 빼기', act: { t: 'roomDel', id: it.rs.id } }])) continue; }
     break;
   }
+  if (list.length && !list.some(x => x.rs)) {
+    const sumMin = list.reduce((t, x) => t + x.min, 0);
+    if (W - sumMin >= 2400) { const k = list.findIndex(x => x.kind === 'pantry'); const filler = { kind: 'storage', min: 1200, wt: 2, filler: true }; if (k >= 0) list.splice(k, 0, filler); else list.push(filler); }
+  }
   const hasNorth = list.length > 0;
-  let Dn = hasNorth ? clamp(r100(D * 0.5), 2700, 3600) : 0;
-  if (hasNorth && D - Dn < 2700) Dn = Math.max(2400, D - 2700);
+  const dWant = Math.max(0, ...list.map(x => x.dReq || 0));
+  let Dn = hasNorth ? Math.max(clamp(r100(D * 0.5), 2700, 3600), dWant) : 0;
+  if (hasNorth && D - Dn < 2700) { if (dWant) warn.push('원한 방 깊이가 거실·주방 공간과 겹쳐 줄였습니다.'); Dn = Math.max(2400, D - 2700); }
   const Ds = D - Dn; m.Ds = Ds;
   // 폭 배분
-  const fixed = new Set(); let widths = [];
-  for (let it = 0; it < 8; it++) {
-    const free = W - list.reduce((s, x, k) => s + (fixed.has(k) ? x.min : 0), 0), ws = list.reduce((s, x, k) => s + (fixed.has(k) ? 0 : x.wt), 0);
-    widths = list.map((x, k) => fixed.has(k) ? x.min : free * x.wt / ws);
-    let ch = false; widths.forEach((w, k) => { if (!fixed.has(k) && w < list[k].min) { fixed.add(k); ch = true; } }); if (!ch) break;
-  }
-  const xs = [0]; let acc = 0; widths.forEach((w, k) => { acc = k === widths.length - 1 ? W : r100(acc + w); xs.push(acc); });
+  const xs = allocBand(list, W);
 
   const out = outerWalls(m);
   const mid = hasNorth ? addWall(m, 'h', Ds, 100, W - 100, 100, false) : null;
@@ -1031,7 +1243,7 @@ function layoutNormal(m, o) {
     if (o.entry === 'own') op(out.S, 300, 1200, 'front', 0, 2250, { side: -1, hinge: 'a' });
     else op(out.Wst, 300, 1200, 'front', 0, 2250, { side: -1, hinge: 'a' });
   }
-  m.rooms.push({ key: 'living', name: hasK ? '거실' : '가족실', kind: hasK ? 'living' : 'family', x0: Wc, y0: 0, x1: Xk, y1: Ds });
+  m.rooms.push({ key: 'living', name: '거실', kind: hasK ? 'living' : 'family', x0: Wc, y0: 0, x1: Xk, y1: Ds });
   if (hasK) m.rooms.push({ key: 'kitchen', name: '주방·식당', kind: 'kitchen', x0: Xk, y0: 0, x1: W, y1: Ds });
   const lw = Xk - Wc;
   if (lw >= 1800) win(out.S, (Wc + Xk) / 2, clamp(r100(lw * 0.68), 1500, 3600), 400, 2200, { split: lw > 2400 ? 3 : 2 });
@@ -1042,19 +1254,12 @@ function layoutNormal(m, o) {
   const parentRoom = {};
   list.forEach((it, k) => {
     const x0 = xs[k], x1 = xs[k + 1], w = x1 - x0;
-    let name;
-    if (it.kind === 'master') name = it.rs.name || '안방';
-    else if (it.kind === 'bed') name = it.rs.name || `침실${++nb + 1}`;
-    else if (it.kind === 'other') name = it.rs.name || `방${++no}`;
-    else if (it.kind === 'bath') name = totalBath > 1 ? `욕실${++nbath}` : '욕실';
-    else if (it.kind === 'dress') name = `${parentRoom[it.parent.id]?.name || '안방'} 드레스룸`;
-    else if (it.kind === 'ensuite') name = `${parentRoom[it.parent.id]?.name || '안방'} 욕실`;
-    else name = { util: '다용도실', pantry: '팬트리' }[it.kind];
+    let name = it.kind === 'bath' ? (totalBath > 1 ? `욕실${++nbath}` : '욕실') : roomName(m.names ? m : Object.assign(m, { names: { bed: 0, other: 0 } }), it.kind, it.rs || {}, it.parent && parentRoom[it.parent.id]?.name);
     const room = { key: it.kind + k, name, kind: it.kind, x0, y0: Ds, x1, y1: D, rs: it.rs || null, parentId: it.parent?.id || null };
     if (it.rs) parentRoom[it.rs.id] = room;
     m.rooms.push(room);
     if (k > 0) addWall(m, 'v', x0, Ds + 50, D - 100, 100, false);
-    const isRoom = ['master', 'bed', 'other'].includes(it.kind);
+    const isRoom = ['master', 'bed', 'other', 'storage'].includes(it.kind);
     if (isRoom) win(out.N, (x0 + x1) / 2, clamp(r100(w * 0.5), 900, 2400), 900, 2200, { split: w * 0.5 > 1600 ? 2 : 1 });
     else if (it.kind !== 'pantry' && it.kind !== 'dress') win(out.N, (x0 + x1) / 2, 600, 1500, 2100, { frosted: /bath|ensuite/.test(it.kind) });
     if (isRoom && k === 0) win(out.Wst, (Ds + D) / 2, 900, 900, 2200);
@@ -1287,7 +1492,7 @@ const cylF = (cx, cy, r, z0, z1, n = 14) => prismF([...Array(n)].map((_, i) => [
 /** 지붕 형상 정보: 처마·용마루 높이 등 (도면 치수용) */
 function topH(m) { return (m.floors ? (m.floors.length - 1) * m.FF : 0) + m.H; }
 function roofInfo(m) {
-  const { W, D, spec } = m, H = topH(m), p = spec.pitch * Math.PI / 180, t = Math.tan(p), th = spec.roof === 'flat' ? 250 : 200;
+  const { D, spec } = m, W = m.roofW ?? m.W, H = topH(m), p = spec.pitch * Math.PI / 180, t = Math.tan(p), th = spec.roof === 'flat' ? 250 : 200;
   const alongX = W >= D, L = alongX ? W : D, S = alongX ? D : W;
   const ov = spec.roof === 'flat' ? 0 : 600, og = spec.roof === 'gable' ? 400 : ov;
   const dz = spec.roof === 'flat' ? th : th / Math.cos(p);
@@ -1303,7 +1508,7 @@ function roofInfo(m) {
 function buildSolids(m) {
   const S = [], { W, D, H, FF, spec } = m, N = m.floors.length;
   const add = (layer, mat, faces, extra = {}) => S.push({ layer, mat, faces, ...extra });
-  add('found', 'found', boxF(-100, -100, -450, W + 100, D + 100, -50), { level: 0 });
+  add('found', 'found', boxF(-100, -100, -450, m.floors[0].W + 100, D + 100, -50), { level: 0 });
   m.floors.forEach((fm, li) => {
     const z0 = fm.z0, L = (layer, mat, faces, extra = {}) => add(layer, mat, faces.map(f => f.map(p => [p[0], p[1], p[2] + z0])), { level: li, ...extra });
     for (const r of fm.rooms) {
@@ -1312,7 +1517,7 @@ function buildSolids(m) {
       const fmat = { bath: 'tile', ensuite: 'tile', entry: 'tileDark', util: 'tile', core: 'tileDark', parking: 'found' }[r.kind] || 'floor';
       L('floor', fmat, boxF(I.x0, I.y0, -50, I.x1, I.y1, 0), { room: r.key });
     }
-    if (!fm.piloti) L('ceiling', 'ceiling', boxF(100, 100, H, W - 100, D - 100, H + 20));
+    if (!fm.piloti) L('ceiling', 'ceiling', boxF(100, 100, H, fm.W - 100, D - 100, H + 20));
     for (const w of fm.walls) {
       const mat = w.ext ? 'wallExt' : 'wallInt', ops = [...w.ops].sort((a, b) => a.a - b.a);
       const B = (a, b, za, zb) => { if (b - a < 1 || zb - za < 1) return; L('wall', mat, w.o === 'h' ? boxF(a, w.c - w.t / 2, za, b, w.c + w.t / 2, zb) : boxF(w.c - w.t / 2, a, za, w.c + w.t / 2, b, zb), { ext: w.ext }); };
@@ -1322,7 +1527,15 @@ function buildSolids(m) {
     }
     for (const f of fm.furn) furnSolids(f, L, FF);
     if (fm.stair && li < N - 1) stairSolids(fm.stair, FF, L);
-    if (li < N - 1) for (const [x0, y0, x1, y1] of holeRects([-100, -100, W + 100, D + 100], fm.stair || m.floors[li + 1].stair)) L('slab', 'found', boxF(x0, y0, H, x1, y1, FF));
+    if (li < N - 1) {
+      const up = m.floors[li + 1], Wa = Math.max(fm.W, up.W);
+      for (const [x0, y0, x1, y1] of holeRects([-100, -100, Wa + 100, D + 100], fm.stair || up.stair)) L('slab', 'found', boxF(x0, y0, H, x1, y1, FF));
+      if (fm.W > up.W + 300) { // 아래층이 넓으면 드러난 지붕(테라스) + 난간벽
+        const xa = up.W + 100, xb = fm.W + 100;
+        L('roof', 'roofFlat', boxF(xa, -100, FF, xb, D + 100, FF + 30));
+        for (const [a0, b0, a1, b1] of [[xa, -100, xb, 100], [xa, D - 100, xb, D + 100], [xb - 200, 100, xb, D - 100]]) L('wall', 'wallExt', boxF(a0, b0, FF, a1, b1, FF + 900), { ext: true });
+      }
+    }
   });
   roofSolids(m, add);
   gutterSolids(m, add);
@@ -1334,19 +1547,30 @@ function holeRects(R, h) {
   const [x0, y0, x1, y1] = R;
   return [[x0, y0, x1, h.y0], [x0, h.y1, x1, y1], [x0, h.y0, h.x0, h.y1], [h.x1, h.y0, x1, h.y1]].filter(r => r[2] - r[0] > 1 && r[3] - r[1] > 1);
 }
-/** ㄷ자(U형) 계단: 동쪽 칸으로 올라가 북쪽 참에서 돌아 서쪽 칸으로 올라감 */
-function stairInfo(st, FF) {
-  const n = Math.ceil(FF / 180), R = FF / n, n1 = Math.ceil(n / 2), n2 = n - n1, xm = (st.x0 + st.x1) / 2;
-  const land = 1100, T = Math.min(280, (st.y1 - st.y0 - land) / Math.max(n1, n2));
-  return { n, R, n1, n2, xm, land, T };
-}
+/** 계단 형상: U(ㄷ자)·L(ㄴ자)·I(일자)·O(원형) */
 function stairSolids(st, FF, L) {
-  const { R, n1, n2, xm, land, T } = stairInfo(st, FF);
-  for (let i = 0; i < n1; i++) L('stair', 'stairMat', boxF(xm + 30, st.y0 + i * T, Math.max(0, (i + 1) * R - 350), st.x1, st.y0 + (i + 1) * T, (i + 1) * R));
-  L('stair', 'stairMat', boxF(st.x0, st.y1 - land, n1 * R - 200, st.x1, st.y1, n1 * R));
-  const yL = st.y1 - land;
-  for (let i = 0; i < n2; i++) L('stair', 'stairMat', boxF(st.x0, yL - (i + 1) * T, n1 * R + (i + 1) * R - 350, xm - 30, yL - i * T, n1 * R + (i + 1) * R));
-  L('stair', 'frame', boxF(xm - 30, st.y0, 0, xm + 30, st.y1 - land, FF));
+  const { R, T } = st, step = (x0, y0, x1, y1, z) => L('stair', 'stairMat', boxF(x0, y0, Math.max(0, z - 350), x1, y1, z));
+  if (st.type === 'I') { for (let i = 0; i < st.n - 1; i++) step(st.x0, st.y0 + i * T, st.x1, st.y0 + (i + 1) * T, (i + 1) * R); return; }
+  if (st.type === 'L') {
+    const w = st.w; for (let i = 0; i < st.n1; i++) step(st.x1 - w, st.y0 + i * T, st.x1, st.y0 + (i + 1) * T, (i + 1) * R);
+    L('stair', 'stairMat', boxF(st.x1 - w, st.y1 - w, st.n1 * R - 200, st.x1, st.y1, st.n1 * R));
+    for (let j = 0; j < st.n2 - 1; j++) step(st.x1 - w - (j + 1) * T, st.y1 - w, st.x1 - w - j * T, st.y1, st.n1 * R + (j + 1) * R);
+    return;
+  }
+  if (st.type === 'O') {
+    const cx = (st.x0 + st.x1) / 2, cy = (st.y0 + st.y1) / 2, r = Math.min(st.x1 - st.x0, st.y1 - st.y0) / 2 - 30, a0 = -Math.PI / 2, da = (Math.PI * 2 * 0.9) / st.n;
+    for (let i = 0; i < st.n - 1; i++) {
+      const a = a0 + i * da, b = a + da * 1.05, z = (i + 1) * R;
+      const poly = [[cx, cy], [cx + r * Math.cos(a), cy + r * Math.sin(a)], [cx + r * Math.cos((a + b) / 2), cy + r * Math.sin((a + b) / 2)], [cx + r * Math.cos(b), cy + r * Math.sin(b)]];
+      L('stair', 'stairMat', prismF(poly, 'z', z - 60, z));
+    }
+    L('stair', 'frame', cylF(cx, cy, 80, 0, FF, 12)); return;
+  }
+  const xm = (st.x0 + st.x1) / 2, land = st.w, yL = st.y1 - land;
+  for (let i = 0; i < st.n1; i++) step(xm + 30, st.y0 + i * T, st.x1, st.y0 + (i + 1) * T, (i + 1) * R);
+  L('stair', 'stairMat', boxF(st.x0, yL, st.n1 * R - 200, st.x1, st.y1, st.n1 * R));
+  for (let i = 0; i < st.n2 - 1; i++) step(st.x0, yL - (i + 1) * T, xm - 30, yL - i * T, st.n1 * R + (i + 1) * R);
+  L('stair', 'frame', boxF(xm - 30, st.y0, 0, xm + 30, yL, FF));
 }
 
 function openingSolids(add, w, o) {
@@ -1382,7 +1606,7 @@ function openingSolids(add, w, o) {
 }
 
 function roofSolids(m, add) {
-  const { W, D, spec } = m, H = topH(m), R = roofInfo(m), { t, dz, alongX, L, S, ov, og, zE } = R;
+  const { D, spec } = m, W = m.roofW ?? m.W, H = topH(m), R = roofInfo(m), { t, dz, alongX, L, S, ov, og, zE } = R;
   const P = (u, v, z) => alongX ? [u, v, z] : [v, u, z];          // (u: 용마루 방향, v: 가로 방향) → (x,y)
   const u0 = -100, u1 = L + 100, v0 = -100, v1 = S + 100, vm = S / 2;
   const roof = (top) => add('roof', 'roof', slabF(top, dz));
@@ -1431,6 +1655,7 @@ function roofSolids(m, add) {
 }
 
 function gutterSolids(m, add) {
+  const mW = m.roofW ?? m.W;
   for (const [a, b] of (m.gutters || [])) {
     const z = a[2], alongX = Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1]);
     if (alongX) {
@@ -1441,7 +1666,7 @@ function gutterSolids(m, add) {
     } else {
       const x = a[0], y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
       add('gutter', 'frame', boxF(x - 65, y0, z - 130, x + 65, y1, z));
-      const o = x < m.W / 2 ? -1 : 1, xw = (o < 0 ? -100 : m.W + 100) + o * 70;
+      const o = x < mW / 2 ? -1 : 1, xw = (o < 0 ? -100 : mW + 100) + o * 70;
       for (const y of [y0 + 300, y1 - 300]) { add('gutter', 'frame', boxF(xw - 40, y - 40, -300, xw + 40, y + 40, z - 330)); add('gutter', 'frame', boxF(Math.min(x, xw) - 40, y - 40, z - 330, Math.max(x, xw) + 40, y + 40, z - 250)); }
     }
   }
@@ -1588,7 +1813,7 @@ function dimLine(g, o, a, b, c, ref, txt, h = 180) {
 
 /* ---------------- 평면도 ---------------- */
 function planPrims(M, fi = 0) {
-  const m = M.floors[fi], g = P2(), { W, D } = M;
+  const m = M.floors[fi], g = P2(), D = M.D, W = m.W;
   // 실 바탕
   for (const r of m.rooms) g.r('room', r.x0, r.y0, r.x1, r.y1, { fill: 'rf-' + r.kind });
   if (fi === 0 && M.deck) { const d = M.deck; g.r('furn', d.x0, d.y0, d.x1, d.y1, { fill: 'rf-deck' }); for (let x = d.x0 + 140; x < d.x1; x += 140) g.l('aux', x, d.y0, x, d.y1); g.tx('label', (d.x0 + d.x1) / 2, (d.y0 + d.y1) / 2 - 80, '데크', 220, 'middle', { bold: 1 }); }
@@ -1606,6 +1831,7 @@ function planPrims(M, fi = 0) {
   }
   if (m.stepLine) { const t = m.stepLine; if (t.h) g.l('aux', t.x0, t.y, t.x1, t.y, { dash: 1 }); else g.l('aux', t.x, t.y0, t.x, t.y1, { dash: 1 }); }
   if (m.stair) stairPlan(g, m.stair, M.FF, fi, M.floors.length);
+  if (fi > 0) { const lo = M.floors[fi - 1]; if (lo.W > W + 300) { g.r('aux', W + 100, -100, lo.W + 100, D + 100, { dash: 1 }); g.tx('label', (W + lo.W) / 2 + 100, D / 2, '아래층 지붕(테라스)', 200, 'middle', { halo: 1 }); } }
   for (const ft of (m.fits || [])) for (const p of ft.paths) if (p.length > 1) g.p('flow', p, false, { dash: 1 });
   // 가구
   for (const f of m.furn) furnPlan(g, f);
@@ -1638,21 +1864,44 @@ function planPrims(M, fi = 0) {
   // 방위표·축척
   const nx = W + 1900, ny = D + 3000;
   g.c('aux', nx, ny, 450); g.p('label', [[nx, ny + 430], [nx + 170, ny - 200], [nx, ny - 80], [nx - 170, ny - 200]], true, { fill: 'ink' }); g.tx('label', nx, ny + 560, 'N', 260, 'middle', { bold: 1 });
-  g.tx('label', 0, yS - 1500, `${M.floors.length > 1 ? m.name + ' ' : ''}평면도   S = 1/100   벽심 ${fmt(W)} × ${fmt(D)} = ${fmt(M.area, 2)}㎡ (약 ${fmt(M.area / PY, 1)}평)${M.floors.length > 1 ? `   연면적 ${fmt(M.totalArea, 2)}㎡` : ''}`, 300, 'start', { bold: 1 });
+  g.tx('label', 0, yS - 1500, `${M.floors.length > 1 ? m.name + ' ' : ''}평면도   S = 1/100   벽심 ${fmt(W)} × ${fmt(D)} = ${fmt(W * D / 1e6, 2)}㎡ (약 ${fmt(W * D / 1e6 / PY, 1)}평)${M.floors.length > 1 ? `   연면적 ${fmt(M.totalArea, 2)}㎡` : ''}`, 300, 'start', { bold: 1 });
   return { prims: g.out, snaps };
 }
 
 function stairPlan(g, st, FF, fi, N) {
-  const { n1, n2, xm, land, T } = stairInfo(st, FF), yL = st.y1 - land;
-  g.r('stair', st.x0, st.y0, st.x1, st.y1);
-  g.l('stair', xm, st.y0, xm, yL);
-  g.l('stair', st.x0, yL, st.x1, yL);
-  for (let i = 1; i < n1; i++) g.l('stair', xm, st.y0 + i * T, st.x1, st.y0 + i * T);
-  for (let i = 1; i < n2; i++) g.l('stair', st.x0, yL - i * T, xm, yL - i * T);
+  const T = st.T, up = fi < N - 1, dn = fi > 0;
+  const arrow = (pts) => { g.p('stair', pts, false); const a = pts[pts.length - 2], b = pts[pts.length - 1], ang = Math.atan2(b[1] - a[1], b[0] - a[0]); g.p('stair', [[b[0] - 160 * Math.cos(ang - .45), b[1] - 160 * Math.sin(ang - .45)], b, [b[0] - 160 * Math.cos(ang + .45), b[1] - 160 * Math.sin(ang + .45)]], false); };
+  const label = (x, y) => { if (up) g.tx('stair', x, y, '올라감', 120); else if (dn) g.tx('stair', x, y, '내려감', 120); };
+  if (st.type === 'I') {
+    g.r('stair', st.x0, st.y0, st.x1, st.y1); for (let i = 1; i < st.n - 1; i++) g.l('stair', st.x0, st.y0 + i * T, st.x1, st.y0 + i * T);
+    const cx = (st.x0 + st.x1) / 2; arrow([[cx, st.y0 + 150], [cx, st.y0 + (st.n - 2) * T]]); label(cx, st.y0 - 180);
+    if (up) g.l('stair', st.x0, st.y0 + st.n * T * 0.5, st.x1, st.y0 + st.n * T * 0.45, { dash: 1 });
+    return;
+  }
+  if (st.type === 'L') {
+    const w = st.w; g.r('stair', st.x1 - w, st.y0, st.x1, st.y1); g.r('stair', st.x0, st.y1 - w, st.x1 - w, st.y1);
+    for (let i = 1; i <= st.n1; i++) g.l('stair', st.x1 - w, st.y0 + i * T, st.x1, st.y0 + i * T);
+    for (let j = 1; j < st.n2; j++) g.l('stair', st.x1 - w - j * T, st.y1 - w, st.x1 - w - j * T, st.y1);
+    const cx = st.x1 - w / 2, cy = st.y1 - w / 2; arrow([[cx, st.y0 + 150], [cx, cy], [st.x0 + 200, cy]]); label(cx, st.y0 - 180);
+    if (up) g.l('stair', st.x1 - w, st.y0 + st.n1 * T * 0.55, st.x1, st.y0 + st.n1 * T * 0.45, { dash: 1 });
+    return;
+  }
+  if (st.type === 'O') {
+    const cx = (st.x0 + st.x1) / 2, cy = (st.y0 + st.y1) / 2, r = Math.min(st.x1 - st.x0, st.y1 - st.y0) / 2 - 30, a0 = -90, da = 324 / st.n;
+    g.c('stair', cx, cy, r); g.c('stair', cx, cy, 80);
+    for (let i = 0; i < st.n; i++) { const a = (a0 + i * da) * Math.PI / 180; g.l('stair', cx + 80 * Math.cos(a), cy + 80 * Math.sin(a), cx + r * Math.cos(a), cy + r * Math.sin(a)); }
+    g.a('stair', cx, cy, r * 0.62, a0 + 10, a0 + 300); const ae = (a0 + 300) * Math.PI / 180, ex = cx + r * 0.62 * Math.cos(ae), ey = cy + r * 0.62 * Math.sin(ae);
+    g.p('stair', [[ex + 150 * Math.cos(ae + 2.4), ey + 150 * Math.sin(ae + 2.4)], [ex, ey], [ex + 150 * Math.cos(ae - 2.4 + Math.PI), ey + 150 * Math.sin(ae - 2.4 + Math.PI)]], false);
+    label(cx, st.y0 - 180); return;
+  }
+  const xm = (st.x0 + st.x1) / 2, yL = st.y1 - st.w;
+  g.r('stair', st.x0, st.y0, st.x1, st.y1); g.l('stair', xm, st.y0, xm, yL); g.l('stair', st.x0, yL, st.x1, yL);
+  for (let i = 1; i < st.n1; i++) g.l('stair', xm, st.y0 + i * T, st.x1, st.y0 + i * T);
+  for (let i = 1; i < st.n2; i++) g.l('stair', st.x0, yL - i * T, xm, yL - i * T);
   const ax = (xm + st.x1) / 2, bx = (st.x0 + xm) / 2;
-  if (fi < N - 1) { g.l('stair', ax, st.y0 + 200, ax, yL - 300); g.p('stair', [[ax - 90, yL - 450], [ax, yL - 300], [ax + 90, yL - 450]], false); g.tx('stair', ax, st.y0 + 60, '올라감', 120); }
-  if (fi > 0) { g.l('stair', bx, yL - 300, bx, st.y0 + 200); g.p('stair', [[bx - 90, st.y0 + 350], [bx, st.y0 + 200], [bx + 90, st.y0 + 350]], false); g.tx('stair', bx, st.y0 + 60, '내려감', 120); }
-  if (fi < N - 1) g.l('stair', xm, st.y0 + (yL - st.y0) * 0.55, st.x1, st.y0 + (yL - st.y0) * 0.45, { dash: 1 });
+  if (up) { arrow([[ax, st.y0 + 200], [ax, yL + st.w / 2], [bx, yL + st.w / 2], [bx, st.y0 + 300]]); g.l('stair', xm, st.y0 + (yL - st.y0) * 0.55, st.x1, st.y0 + (yL - st.y0) * 0.45, { dash: 1 }); }
+  else if (dn) arrow([[bx, yL - 300], [bx, st.y0 + 200]]);
+  label((st.x0 + st.x1) / 2, st.y0 - 180);
 }
 function openingPlan(g, w, o) {
   if (o.kind === 'open') return;
@@ -2206,11 +2455,15 @@ function setMode(md) {
 function renderPick() {
   const s = ST.pick, cap = roomCap(s);
   const B = (k, v, label) => `<button class="pb" data-pk="${k}" data-pv="${v}" aria-pressed="${String(s[k]) === String(v)}">${label}</button>`;
-  const rooms = s.rooms.map((r, i) => `<span class="rchip k-${r.kind}">${esc(r.name || ROOM_KINDS[r.kind])}${r.dress ? ' · 드레스룸' : ''}${r.ensuite ? ' · 전용욕실' : ''}<button data-rm="${i}" aria-label="빼기">×</button></span>`).join('');
+  const rooms = s.rooms.map((r, i) => `<span class="rchip k-${r.kind}">${esc(r.name || ROOM_KINDS[r.kind])}${r.dress ? ' · 드레스룸' : ''}${r.ensuite ? ' · 전용욕실' : ''}${r.size ? ` · ${fmt(r.size.w)}×${fmt(r.size.d)}` : ''}<button data-rm="${i}" aria-label="빼기">×</button></span>`).join('');
   $('#pickPanel').innerHTML = `
    <div class="pg"><h3>건물</h3><div class="pbs">${['전원주택', '단독주택', '세컨하우스', '빌라', '농막', '원룸형'].map(v => B('type', v, v)).join('')}</div></div>
    <div class="pg"><h3>층수</h3><div class="pbs">${[1, 2, 3, 4, 5].map(v => B('floors', v, v + '층')).join('')}${s.floors > 1 && isMulti(s) ? `<label class="chk" style="margin-left:6px"><input type="checkbox" data-pt="piloti"${s.piloti ? ' checked' : ''}> 1층 필로티 주차</label>` : ''}</div></div>
-   <div class="pg"><h3>${isMulti(s) ? '한 세대 면적' : '전체 면적'} <b class="num">${fmt(s.areaPy, 0)}평</b> <span class="muted">(${fmt(s.areaPy * PY, 1)}㎡)</span></h3><input type="range" min="5" max="${MAX_PY}" step="1" value="${s.areaPy}" data-pr="areaPy"></div>
+   ${s.floors > 1 && !isMulti(s) ? `<div class="pg"><h3>면적 기준</h3><div class="pbs">${B('areaMode', 'floor', '층마다 같은 평수')}${B('areaMode', 'each', '층별로 따로')}${B('areaMode', 'total', '전체(연면적)')}</div></div>` : ''}
+   ${s.areaMode === 'each' && s.floors > 1 && !isMulti(s) ? floorPys(s).map((p, i) => `<div class="pg"><h3>${i + 1}층 <b class="num">${fmt(p, 0)}평</b></h3><input type="range" min="5" max="${MAX_PY}" step="1" value="${p}" data-pf="${i}"></div>`).join('')
+     : `<div class="pg"><h3>${isMulti(s) ? '한 세대 면적' : s.floors > 1 ? (s.areaMode === 'total' ? '전체 면적' : '층당 면적') : '면적'} <b class="num">${fmt(s.areaPy, 0)}평</b> <span class="muted">(${fmt(s.areaPy * PY, 1)}㎡${s.floors > 1 && !isMulti(s) && s.areaMode === 'floor' ? `, 연면적 ${fmt(s.areaPy * s.floors, 0)}평` : ''})</span></h3><input type="range" min="5" max="${s.areaMode === 'total' && !isMulti(s) ? MAX_PY * s.floors : MAX_PY}" step="1" value="${s.areaPy}" data-pr="areaPy"></div>`}
+   ${s.floors > 1 ? `<div class="pg"><h3>계단</h3><div class="pbs">${Object.entries(STAIRS).map(([k, v]) => B('stair', k, v)).join('')}</div></div>` : ''}
+   ${s.floors > 1 && !isMulti(s) ? `<div class="pg"><h3>거실 둘 층 <span class="muted">나머지 층은 방과 복도</span></h3><div class="pbs">${[...Array(s.floors)].map((_, i) => `<button class="pb" data-lvp="${i + 1}" aria-pressed="${s.livingFloors.includes(i + 1)}">${i + 1}층</button>`).join('')}</div></div>` : ''}
    <div class="pg"><h3>지붕</h3><div class="pbs">${Object.entries(ROOF_NAMES).map(([k, v]) => B('roof', k, v.replace(/\(.*\)/, ''))).join('')}</div></div>
    <div class="pg"><h3>방 <span class="muted">${s.rooms.length} / 최대 ${cap}개</span></h3><div class="rchips">${rooms || '<span class="muted">방 없음 (원룸형)</span>'}</div>
     <div class="pbs" style="margin-top:8px"><button class="pb add" data-add="master">+ 안방</button><button class="pb add" data-add="bed">+ 침대방</button><button class="pb add" data-add="other">+ 그외 방</button></div>
@@ -2220,11 +2473,12 @@ function renderPick() {
    <div class="pg"><h3>추가</h3><div class="pbs"><label class="chk"><input type="checkbox" data-pt="utility"${s.utility ? ' checked' : ''}> 다용도실</label><label class="chk"><input type="checkbox" data-pt="deck"${s.deck ? ' checked' : ''}> 데크</label><label class="chk"><input type="checkbox" data-pt="tub"${s.tub ? ' checked' : ''}> 욕조</label></div></div>
    <div class="pg"><h3>외벽</h3><div class="pbs">${Object.entries(WALL_MATS).map(([k, v]) => B('wallMat', k, v.replace(/ \(.*\)/, ''))).join('')}</div></div>
    <div class="pg"><h3>지붕재</h3><div class="pbs">${Object.entries(ROOF_MATS).map(([k, v]) => B('roofMat', k, v)).join('')}</div></div>
-   <p class="muted" style="font-size:12.5px;margin:4px 0 0">방마다 가구는 도면을 만든 뒤 ‘방별 가구’에서 고릅니다.</p>`;
+   <p class="muted" style="font-size:12.5px;margin:4px 0 0">방 크기와 가구는 도면을 만든 뒤 ‘방별 가구’에서 정합니다. 만들기 전에 문제가 있으면 먼저 알려 드립니다.</p>`;
   const P = $('#pickPanel');
   P.onclick = e => {
     const b = e.target.closest('[data-pk]');
-    if (b) { const k = b.dataset.pk; let v = b.dataset.pv; if (['floors', 'baths'].includes(k)) v = +v; s[k] = v; if (k === 'roof') s.pitch = { gable: 30, hip: 25, shed: 12, flat: 0 }[v]; if (k === 'type' && isMulti(s)) { if (s.floors < 2) s.floors = 4; s.piloti = s.floors >= 3; s.roof = 'flat'; s.pitch = 0; } normalizeSpec(s); renderPick(); return; }
+    if (b) { const k = b.dataset.pk; let v = b.dataset.pv; if (['floors', 'baths'].includes(k)) v = +v; s[k] = v; if (k === 'roof') s.pitch = { gable: 30, hip: 25, shed: 12, flat: 0 }[v]; if (k === 'type' && isMulti(s)) { if (s.floors < 2) s.floors = 4; s.piloti = s.floors >= 3; s.roof = 'flat'; s.pitch = 0; } if (k === 'areaMode') { const pys = floorPys({ ...s, areaMode: s._prevMode || 'floor' }); if (v === 'total') s.areaPy = Math.min(MAX_PY * s.floors, pys.reduce((a, b) => a + b, 0)); else if (v === 'each') s.floorPy = pys; else s.areaPy = Math.min(MAX_PY, pys[0]); } s._prevMode = s.areaMode; normalizeSpec(s); renderPick(); return; }
+    const lp = e.target.closest('[data-lvp]'); if (lp) { const f = +lp.dataset.lvp; s.livingFloors = s.livingFloors.includes(f) ? s.livingFloors.filter(x => x !== f) : [...s.livingFloors, f].sort(); if (!s.livingFloors.length) s.livingFloors = [1]; renderPick(); return; }
     const a = e.target.closest('[data-add]'); if (a) { if (s.rooms.length >= cap) return toast(`이 면적에는 방을 최대 ${cap}개까지 넣을 수 있습니다.`); if (a.dataset.add === 'master' && s.rooms.some(r => r.kind === 'master')) return toast('안방은 하나만 넣을 수 있습니다.'); s.rooms.push(newRoom(a.dataset.add)); renderPick(); return; }
     const r = e.target.closest('[data-rm]'); if (r) { s.rooms.splice(+r.dataset.rm, 1); renderPick(); }
   };
@@ -2233,12 +2487,14 @@ function renderPick() {
     if (t.dataset.pt) { s[t.dataset.pt] = t.checked; renderPick(); }
     if (t.dataset.mr) { s.rooms.find(r => r.kind === 'master')[t.dataset.mr] = t.checked; renderPick(); }
   };
-  P.oninput = e => { const t = e.target; if (t.dataset.pr) { s.areaPy = +t.value; t.previousElementSibling.querySelector('b').textContent = fmt(s.areaPy, 0) + '평'; } };
-  P.querySelector('[data-pr]').onchange = () => { normalizeSpec(s); renderPick(); };
+  P.oninput = e => { const t = e.target; if (t.dataset.pr) { s.areaPy = +t.value; t.previousElementSibling.querySelector('b').textContent = fmt(s.areaPy, 0) + '평'; } if (t.dataset.pf != null) { s.floorPy = floorPys(s); s.floorPy[+t.dataset.pf] = +t.value; t.previousElementSibling.querySelector('b').textContent = fmt(+t.value, 0) + '평'; } };
+  P.querySelectorAll('input[type=range]').forEach(r => r.onchange = () => { normalizeSpec(s); renderPick(); });
 }
 function describe(s) {
   const k = s.rooms.reduce((a, r) => (a[r.kind] = (a[r.kind] || 0) + 1, a), {});
-  const parts = [`${fmt(s.areaPy, 0)}평${s.floors > 1 ? ` ${s.floors}층` : ''} ${ROOF_NAMES[s.roof].replace(/\(.*\)/, '')} ${s.type}`];
+  const area = s.floors > 1 && !isMulti(s) ? (s.areaMode === 'each' ? floorPys(s).map((p, i) => `${i + 1}층 ${fmt(p, 0)}평`).join(' ') : s.areaMode === 'total' ? `연면적 ${fmt(s.areaPy, 0)}평` : `층당 ${fmt(s.areaPy, 0)}평`) : `${fmt(s.areaPy, 0)}평`;
+  const parts = [`${s.floors > 1 ? s.floors + '층 ' : ''}${ROOF_NAMES[s.roof].replace(/\(.*\)/, '')} ${s.type}, ${isMulti(s) ? '세대 ' : ''}${area}`];
+  if (s.floors > 1) parts.push(`${STAIRS[s.stair]} 계단`); if (s.floors > 1 && !isMulti(s)) parts.push(`거실은 ${s.livingFloors.join('·')}층`);
   if (s.piloti) parts.push('1층 필로티 주차');
   parts.push(`방 ${s.rooms.length}개 (${Object.entries(k).map(([a, n]) => ROOM_KINDS[a] + ' ' + n).join(', ')})`, `공용 욕실 ${s.baths}개`);
   const m = s.rooms.find(r => r.kind === 'master'); if (m && m.dress) parts.push('안방 드레스룸'); if (m && m.ensuite) parts.push('안방 전용 욕실');
@@ -2251,10 +2507,10 @@ function generateFromPick() {
   const s = clone(ST.pick); const warn = []; normalizeSpec(s, warn);
   ST.spec = s; ST.parsed = { spec: s, tokens: [], warn };
   $('#cmd').value = describe(s); liveHL();
-  generate(false);
+  ST.checkNext = true; generate(false);
 }
 
-/* ---------- 생성 ---------- */
+/* ---------- 생성 (그리기 전 확인) ---------- */
 async function generate(fromText, specOverride, silent) {
   ST.text = $('#cmd').value;
   if (fromText) {
@@ -2268,6 +2524,13 @@ async function generate(fromText, specOverride, silent) {
     ST.spec = ST.parsed.spec; ST.pick = null;
   }
   ST.model = layoutPlan(ST.spec);
+  const check = (fromText || ST.checkNext) && !silent && ST.model.issues.length;
+  ST.checkNext = false;
+  if (check) { openCheck(); return; }
+  finishGenerate(fromText, silent);
+}
+function finishGenerate(fromText, silent) {
+  const cap = roomCap(ST.spec); if (ST.spec.rooms.length > cap) { ST.spec.rooms = ST.spec.rooms.slice(0, cap); ST.model = layoutPlan(ST.spec); }
   ST.solids = buildSolids(ST.model);
   ST.key++;
   if (!sheets().some(s => s[0] === ST.sheet)) ST.sheet = 'plan0';
@@ -2277,6 +2540,26 @@ async function generate(fromText, specOverride, silent) {
   localStorage.setItem('wonman.last', JSON.stringify({ text: ST.text, spec: ST.spec, name: ST.name, pid: ST.pid }));
   if (isPhone() && !silent && (fromText || ST.mode === 'pick')) go('result'); else setView(ST.view, true);
 }
+function openCheck() {
+  const d = $('#check'), M = ST.model, iss = M.issues;
+  const lvl = { furn: '가구', info: '크기' };
+  $('#checkIn').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><h2>그리기 전에 확인해 주세요</h2><button class="btn sm" data-cx="close">닫기</button></div>
+   <p class="muted" style="margin:0 0 12px;font-size:13px">${iss.length ? `고칠 점이 ${iss.length}개 있습니다. 버튼을 누르면 바로 고쳐서 다시 확인합니다. 그대로 그려도 됩니다.` : '문제가 모두 풀렸습니다. 이제 그리면 됩니다.'}</p>
+   <div class="chk-list">${iss.map((x, i) => `<div class="ci"><div class="cm"><span class="tag">${lvl[x.level] || '배치'}</span>${esc(x.msg)}</div>
+     <div class="cf">${x.fixes.map((f, j) => `<button class="btn sm" data-fx="${i}|${j}">${esc(f.label)}</button>`).join('')}
+     ${x.fixes.find(f => f.input) ? `<span class="din"><input type="number" min="5" max="${MAX_PY}" step="1" value="${x.fixes.find(f => f.input).input.value}" data-din="${i}"> 평 <button class="btn sm" data-dx="${i}">직접 입력 적용</button></span>` : ''}</div></div>`).join('')}</div>
+   <div class="row-acts" style="margin-top:16px;justify-content:flex-end"><button class="btn" data-cx="edit">사양에서 직접 고치기</button><button class="btn pri" data-cx="go">${iss.length ? '이대로 도면 그리기' : '도면 그리기'}</button></div>`;
+  d.onclick = e => {
+    const fx = e.target.closest('[data-fx]');
+    if (fx) { const [i, j] = fx.dataset.fx.split('|').map(Number); const f = iss[i].fixes[j]; applyFix(ST.spec, f.act); if (f.act.all && ST.spec.areaMode === 'each') ST.spec.floorPy = ST.spec.floorPy.map(() => f.act.py); ST.model = layoutPlan(ST.spec); openCheck(); return; }
+    const dx = e.target.closest('[data-dx]');
+    if (dx) { const i = +dx.dataset.dx, f = iss[i].fixes.find(q => q.input), v = +$(`[data-din="${i}"]`).value; if (!(v >= 5)) return; applyFix(ST.spec, f.act, v); ST.model = layoutPlan(ST.spec); openCheck(); return; }
+    const cx = e.target.closest('[data-cx]')?.dataset.cx;
+    if (cx === 'close') d.close();
+    if (cx === 'go' || cx === 'edit') { d.close(); finishGenerate(true); if (cx === 'edit') { if (isPhone()) { go('info'); $$('.sec').forEach(s => s.classList.toggle('on', s.id === 'sec-spec')); document.body.dataset.screen = 'sec'; } else $('#sec-spec').scrollIntoView({ behavior: 'smooth' }); } }
+  };
+  if (!d.open) d.showModal();
+}
 function allWarns() { return [...(ST.parsed ? ST.parsed.warn : []), ...ST.model.warn]; }
 function renderInfo() {
   const { parsed, model, spec } = ST;
@@ -2285,7 +2568,8 @@ function renderInfo() {
   $('#chips').innerHTML = (parsed && parsed.ai ? '<span class="chip"><i style="background:var(--accent)"></i>AI 분석</span>' : '') + (tks.length ? tks.map(t => `<span class="chip"><i style="background:${col[t.cat]}"></i>${esc(t.label)}</span>`).join('') : (ST.mode === 'pick' ? '<span class="muted">선택한 내용으로 만들었습니다.</span>' : '<span class="muted">인식한 단어가 없어 기본값으로 만들었습니다.</span>'));
   $('#tkCnt').textContent = tks.length ? `${tks.length}개` : '';
   const warns = allWarns();
-  $('#warns').innerHTML = warns.map(w => `<li>${esc(w)}</li>`).join('');
+  $('#warns').innerHTML = warns.map(w => `<li>${esc(w)}</li>`).join('') + (model.issues.length ? `<li style="list-style:none;padding:0"><button class="btn sm" id="bIssues">고칠 점 ${model.issues.length}개 보기</button></li>` : '');
+  const bi = $('#bIssues'); if (bi) bi.onclick = () => openCheck();
   const bad = model.rooms.reduce((n, r) => n + (r.fit ? r.fit.fails.length + r.fit.flow.filter(f => !f.ok).length : 0), 0);
   $('#stWarn').textContent = [warns.length ? `확인할 점 ${warns.length}개` : '', bad ? `못 넣거나 막힌 가구 ${bad}개` : ''].filter(Boolean).join('   ');
   if (ST.text) $('#hl').innerHTML = highlightSentence(ST.text, tks);
@@ -2300,21 +2584,29 @@ function renderSpecForm() {
   $('#specForm').innerHTML = `
    <label class="f">건물 종류<select data-k="type">${types.map(t => `<option${s.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
    <label class="f">층수${sel('floors', { 1: '1층', 2: '2층', 3: '3층', 4: '4층', 5: '5층' })}</label>
-   <label class="f">${isMulti(s) ? '세대 면적 (평)' : '전체 면적 (평)'}${num('areaPy', 0.5, 5, MAX_PY)}</label>
+   ${isMulti(s) || s.floors === 1 ? `<label class="f">${isMulti(s) ? '세대 면적 (평, 최대 50)' : '면적 (평, 최대 50)'}${num('areaPy', 0.5, 5, MAX_PY)}</label>` : `<label class="f">면적 기준${sel('areaMode', { floor: '층마다 같은 평수', total: '전체(연면적)', each: '층별로 따로' })}</label>
+   ${s.areaMode === 'each' ? `<div class="full fpy">${floorPys(s).map((p, i) => `<label class="f">${i + 1}층 (평)<input type="number" data-fpy="${i}" value="${Math.round(p * 10) / 10}" min="5" max="${MAX_PY}" step="0.5"></label>`).join('')}</div>` : `<label class="f">${s.areaMode === 'total' ? `전체 면적 (평, 층당 최대 50)` : '층당 면적 (평, 최대 50)'}${num('areaPy', 0.5, 5, s.areaMode === 'total' ? MAX_PY * s.floors : MAX_PY)}</label>`}`}
    <label class="f">실내 높이 (mm)${num('H', 100, 2200, 4500)}</label>
    <label class="f">지붕 형태${sel('roof', ROOF_NAMES)}</label>
    <label class="f">지붕 경사 (°)${num('pitch', 1, 0, 50)}</label>
    <label class="f">공용 욕실${sel('baths', { 0: '없음', 1: '1개', 2: '2개', 3: '3개' })}</label>
+   ${s.floors > 1 ? `<label class="f">계단 형태${sel('stair', STAIRS)}</label>` : ''}
+   ${s.floors > 1 && !isMulti(s) ? `<div class="full"><span class="muted" style="font-size:12px">거실 둘 층 (주방은 가장 낮은 거실 층, 나머지 층은 방과 복도)</span><div class="toggles" style="padding-top:4px">${[...Array(s.floors)].map((_, i) => `<label class="chk"><input type="checkbox" data-lvf="${i + 1}"${s.livingFloors.includes(i + 1) ? ' checked' : ''}> ${i + 1}층</label>`).join('')}</div></div>` : ''}
    <label class="f">팬트리${sel('pantry', { none: '없음', entry: '현관 쪽', kitchen: '주방 쪽' })}</label>
    <label class="f">외벽 마감${sel('wallMat', WALL_MATS)}</label>
    <label class="f">지붕 마감${sel('roofMat', ROOF_MATS)}</label>
    <div class="toggles">${s.floors > 1 && isMulti(s) ? tg('piloti', '1층 필로티 주차') : ''}${tg('utility', '다용도실')}${tg('deck', '데크')}${tg('tub', '욕조')}</div>
-   <p class="muted full" style="margin:0;font-size:12px">벽심 ${fmt(ST.model.W)} × ${fmt(ST.model.D)} mm, 한 층 ${fmt(ST.model.area, 2)}㎡${ST.model.floors.length > 1 ? `, 연면적 ${fmt(ST.model.totalArea, 2)}㎡ (${fmt(ST.model.totalArea / PY, 1)}평)` : ''}</p>`;
+   <p class="muted full" style="margin:0;font-size:12px">${ST.model.floors.map((f, i) => `${ST.model.floors.length > 1 ? f.name + ' ' : ''}${fmt(f.W)} × ${fmt(ST.model.D)} mm (${fmt(ST.model.areas[i] / PY, 1)}평)`).join(', ')}${ST.model.floors.length > 1 ? ` · 연면적 ${fmt(ST.model.totalArea / PY, 1)}평` : ''}</p>`;
   $('#specForm').onchange = e => {
-    const el = e.target, k = el.dataset.k; if (!k) return;
+    const el = e.target;
+    if (el.dataset.fpy != null) { s.floorPy = floorPys(s); s.floorPy[+el.dataset.fpy] = clamp(+el.value, 5, MAX_PY); s.areaMode = 'each'; normalizeSpec(s); return generate(false); }
+    if (el.dataset.lvf) { const f = +el.dataset.lvf; s.livingFloors = el.checked ? [...new Set([...s.livingFloors, f])].sort() : s.livingFloors.filter(x => x !== f); if (!s.livingFloors.length) { s.livingFloors = [1]; toast('거실은 한 층 이상 있어야 합니다.'); } normalizeSpec(s); return generate(false); }
+    const k = el.dataset.k; if (!k) return;
     let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value;
     if (['floors', 'baths'].includes(k)) v = +v;
-    if (k === 'areaPy') { s.W = s.D = null; v = clamp(v, 5, MAX_PY); }
+    if (k === 'areaPy') { s.W = s.D = null; v = clamp(v, 5, s.areaMode === 'total' && !isMulti(s) ? MAX_PY * s.floors : MAX_PY); }
+    if (k === 'areaMode') { const pys = floorPys(s); if (v === 'total') s.areaPy = pys.reduce((a, b) => a + b, 0); else if (v === 'floor') s.areaPy = Math.min(MAX_PY, pys[0]); else s.floorPy = pys; }
+    if (k === 'floors' && s.areaMode === 'each') s.floorPy = [...Array(v)].map((_, i) => (s.floorPy || [])[i] || s.areaPy);
     if (k === 'roof') s.pitch = { gable: 30, hip: 25, shed: 12, flat: 0 }[v];
     s[k] = v; if (k === 'type' && isMulti(s) && s.floors < 2) s.floors = 4;
     const w = []; normalizeSpec(s, w); if (w.length) toast(w[0], 3500);
@@ -2346,6 +2638,7 @@ function renderRoomsForm() {
        <select data-f="kind">${Object.entries(ROOM_KINDS).map(([k, n]) => `<option value="${k}"${rs.kind === k ? ' selected' : ''}>${n}</option>`).join('')}</select>
        ${multiHouse ? `<select data-f="floor"><option value="0">층 자동</option>${[...Array(s.floors)].map((_, f) => `<option value="${f + 1}"${rs.floor === f + 1 ? ' selected' : ''}>${f + 1}층</option>`).join('')}</select>` : ''}
        <button class="btn sm ghost" data-del="${i}" aria-label="방 빼기">빼기</button></div>
+      <div class="row sz"><span class="muted" style="font-size:12px">크기 (벽 중심)</span><input type="number" data-f="sw" value="${rs.size ? rs.size.w : ''}" placeholder="${lr ? r100(lr.x1 - lr.x0) : '자동'}" step="100" min="1500" aria-label="가로 mm">×<input type="number" data-f="sd" value="${rs.size ? rs.size.d : ''}" placeholder="${lr ? r100(lr.y1 - lr.y0) : '자동'}" step="100" min="1500" aria-label="세로 mm"><span class="muted" style="font-size:12px">mm</span><input type="number" data-f="spy" value="${rs.size ? Math.round(rs.size.w * rs.size.d / 1e6 / PY * 10) / 10 : ''}" placeholder="평" step="0.5" min="2" aria-label="평"><span class="muted" style="font-size:12px">평</span>${rs.size ? `<button class="btn sm ghost" data-auto="${i}">자동</button>` : ''}</div>
       <div class="row">${rs.kind !== 'other' ? `<label class="chk"><input type="checkbox" data-f="dress"${rs.dress ? ' checked' : ''}> 드레스룸 추가</label><label class="chk"><input type="checkbox" data-f="ensuite"${rs.ensuite ? ' checked' : ''}> 전용 욕실</label>` : ''}<label class="chk"><input type="checkbox" data-f="sliding"${rs.sliding ? ' checked' : ''}> 슬라이딩도어</label></div>
       <div class="fchips">${rs.furn ? furnChips(rs.furn, 'r' + i) : `<span class="muted" style="font-size:12px">기본 가구: ${using.map(f => catById(f.id).name + (f.n > 1 ? ' ' + f.n : '')).join(', ')}</span> <button class="btn sm" data-own="${i}">직접 고르기</button>`}</div>
       <select data-addf="r${i}">${catOptions('침실')}</select>
@@ -2359,6 +2652,7 @@ function renderRoomsForm() {
     const a = e.target.closest('[data-addr]');
     if (a) { if (s.rooms.length >= cap) return toast(`이 면적에는 방을 최대 ${cap}개까지 넣을 수 있습니다.`); if (a.dataset.addr === 'master' && s.rooms.some(r => r.kind === 'master')) return toast('안방은 하나만 넣을 수 있습니다.'); s.rooms.push(newRoom(a.dataset.addr)); return generate(false); }
     const d = e.target.closest('[data-del]'); if (d) { s.rooms.splice(+d.dataset.del, 1); return generate(false); }
+    const au = e.target.closest('[data-auto]'); if (au) { s.rooms[+au.dataset.auto].size = null; return generate(false); }
     const o = e.target.closest('[data-own]'); if (o) { const rs = s.rooms[+o.dataset.own]; rs.furn = clone(defaultFurn(rs.kind)); return generate(false); }
     const f = e.target.closest('[data-fm]');
     if (f) {
@@ -2381,6 +2675,8 @@ function renderRoomsForm() {
     if (k === 'name') rs.name = t.value.trim() || null;
     else if (k === 'kind') { if (t.value === 'master' && s.rooms.some(r => r !== rs && r.kind === 'master')) { toast('안방은 하나만 둘 수 있습니다.'); t.value = rs.kind; return; } rs.kind = t.value; if (rs.kind === 'other') { rs.dress = rs.ensuite = false; } }
     else if (k === 'floor') rs.floor = +t.value;
+    else if (k === 'sw' || k === 'sd') { const card2 = t.closest('.roomc'); const w = +card2.querySelector('[data-f="sw"]').value || +card2.querySelector('[data-f="sw"]').placeholder, dd = +card2.querySelector('[data-f="sd"]').value || +card2.querySelector('[data-f="sd"]').placeholder; rs.size = w >= 1500 && dd >= 1500 ? { w: r100(w), d: r100(dd) } : null; }
+    else if (k === 'spy') { const py = +t.value; if (py >= 2) { const A = py * PY * 1e6, w = r100(Math.sqrt(A * 1.15)); rs.size = { w, d: r100(A / w) }; } else rs.size = null; }
     else rs[k] = t.checked;
     generate(false);
   };
@@ -2391,7 +2687,7 @@ function renderArea() {
     if (M.floors.length > 1) html += `<tbody><tr class="fl"><td colspan="3">${f.name}${f.role === 'piloti' ? ' (필로티)' : ''}</td></tr></tbody>`;
     html += `<tbody>${f.rooms.map(r => `<tr><td>${esc(r.name)}</td><td>${fmt(r.area, 2)}</td><td>${fmt(r.area / PY, 1)}</td></tr>`).join('')}</tbody>`;
   });
-  html += `<tfoot><tr><td>${M.floors.length > 1 ? `연면적 (${M.floors.length}개 층)` : `합계 (벽심 ${fmt(M.W)}×${fmt(M.D)})`}</td><td>${fmt(M.totalArea, 2)}</td><td>${fmt(M.totalArea / PY, 1)}</td></tr></tfoot>`;
+  html += `<tfoot><tr><td>${M.floors.length > 1 ? `연면적 (${M.floors.length}개 층)` : `합계 (벽심 ${fmt(M.floors[0].W)}×${fmt(M.D)})`}</td><td>${fmt(M.totalArea, 2)}</td><td>${fmt(M.totalArea / PY, 1)}</td></tr></tfoot>`;
   $('#areaT').innerHTML = html;
 }
 
@@ -2577,7 +2873,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 2.0 · 인터넷 연결은 3D 화면을 처음 열 때와 AI 분석에만 필요합니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 3.0 · 인터넷 연결은 3D 화면을 처음 열 때와 AI 분석에만 필요합니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
