@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#ffd9e6">
+<title>네오달구리 가계부</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- 상단바 -->
+  <header class="topbar">
+    <div class="brand"><span class="logo">🌙🦝</span> <b>네오달구리</b> 가계부</div>
+    <div class="top-actions">
+      <span id="codeChip" class="chip" title="커플 코드"></span>
+      <button id="btnShare" class="icon-btn" title="공유/코드">👩‍❤️‍👨</button>
+    </div>
+  </header>
+
+  <!-- 탭 -->
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-tab="home">🏠 홈</button>
+    <button class="tab" data-tab="ledger">📒 가계부</button>
+    <button class="tab" data-tab="fixedm">📅 월고정</button>
+    <button class="tab" data-tab="master">💰 수입·지출·자산</button>
+    <button class="tab" data-tab="report">🖨️ 리포트</button>
+  </nav>
+
+  <main id="main">
+    <!-- ============ 홈 (위젯) ============ -->
+    <section class="page on" id="page-home">
+      <div class="card accent-pink">
+        <div class="card-h">⚡ 빠른 입력</div>
+        <div class="quick">
+          <select id="qKind" class="f kind"><option value="out">지출</option><option value="in">입금</option></select>
+          <input id="qDate" type="date" class="f">
+          <input id="qAmount" type="text" inputmode="numeric" class="f" placeholder="금액">
+          <select id="qCat" class="f"></select>
+          <select id="qPay" class="f"></select>
+          <input id="qDesc" class="f wide" placeholder="내용 (예: 뉴월드-두부)">
+          <button id="qAdd" class="btn primary">＋ 추가</button>
+        </div>
+        <div id="qMsg" class="hint"></div>
+      </div>
+
+      <div class="card accent-lav">
+        <div class="card-h">💳 생활비 계좌 (쓸 수 있는 돈) <span class="hint">· 지출은 빠지고, 입금은 더해져요</span></div>
+        <div id="homeBalances" class="bal-grid"></div>
+        <div class="hint" style="margin-top:8px">숫자를 누르면 잔고를 새로 맞출 수 있어요 (보통 매월 10일 월급·고정비 정리 후)</div>
+      </div>
+
+      <div class="grid2">
+        <div class="card accent-mint">
+          <div class="card-h">📆 이번 달</div>
+          <div class="big-num" id="homeMonthTotal">0원</div>
+          <div class="sub" id="homeMonthLabel"></div>
+          <div id="homeTopCats" class="chips"></div>
+        </div>
+        <div class="card accent-lav">
+          <div class="card-h">🏦 자산 요약</div>
+          <div class="big-num" id="homeAssetTotal">0원</div>
+          <div class="sub" id="homeAssetDiff"></div>
+          <div id="homeAssetBreak" class="assetbreak"></div>
+          <button id="homeAssetHist" class="link pinklink">📒 월별 자산 기록 보기</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">🕊️ 최근 입력</div>
+        <div id="homeRecent" class="mini-list"></div>
+      </div>
+    </section>
+
+    <!-- ============ 가계부 (입력/내역) ============ -->
+    <section class="page" id="page-ledger">
+      <div class="monthbar">
+        <button id="lPrev" class="icon-btn">‹</button>
+        <b id="lMonthTitle">2026년 10월</b>
+        <button id="lNext" class="icon-btn">›</button>
+        <button id="lToday" class="btn soft">이번달</button>
+      </div>
+      <div id="ledgerBalStrip" class="bal-strip"></div>
+      <div class="card">
+        <div class="card-h">➕ 내역 추가 <span class="hint">· 날짜를 바꾸면 다른 날에도 입력돼요</span></div>
+        <div class="quick">
+          <select id="eKind" class="f kind"><option value="out">지출</option><option value="in">입금</option></select>
+          <input id="eDate" type="date" class="f">
+          <input id="eAmount" type="text" inputmode="numeric" class="f" placeholder="금액">
+          <select id="eCat" class="f"></select>
+          <select id="ePay" class="f"></select>
+          <input id="eDesc" class="f wide" placeholder="내용">
+          <button id="eAdd" class="btn primary">＋ 추가</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h">📄 <span id="lCount">0</span>건 · 지출 <b id="lSum">0원</b> <span id="lInSum" class="hint"></span></div>
+        <div id="ledgerList" class="entry-list"></div>
+        <div id="ledgerEmpty" class="empty" hidden>이 달의 내역이 없어요. 위에서 추가해 보세요 🧸</div>
+      </div>
+    </section>
+
+    <!-- ============ 월고정 (월별 고정지출) ============ -->
+    <section class="page" id="page-fixedm">
+      <div class="monthbar">
+        <button id="fPrev" class="icon-btn">‹</button>
+        <b id="fMonthTitle">2026년 10월</b>
+        <button id="fNext" class="icon-btn">›</button>
+        <button id="fToday" class="btn soft">이번달</button>
+      </div>
+      <div class="card accent-pink">
+        <div class="card-h">📅 <span id="fTitleLabel"></span> 고정지출
+          <span class="hint">· 이번 달 기준으로 수정하면 저장돼요</span></div>
+        <div id="fSyncHint" class="hint synchint"></div>
+        <div id="fInherit" class="hint"></div>
+        <div id="fixedmList" class="kv-list"></div>
+        <div class="row-add">
+          <select id="fWho" class="f"><option value="종진">종진</option><option value="은주">은주</option><option value="공동">공동</option></select>
+          <input id="fName" class="f wide" placeholder="항목 (예: 보험료)">
+          <input id="fAcct" class="f wide" placeholder="계좌번호 (예: 신한 110-123-456789)">
+          <input id="fAmt" type="text" inputmode="numeric" class="f" placeholder="금액">
+          <button id="fAdd" class="btn primary">＋</button>
+        </div>
+        <div class="total-line"><span id="fPaid" class="paidsum"></span>합계 <b id="fSum">0원</b></div>
+      </div>
+      <div class="card">
+        <div class="card-h">🔎 지난 달 검색</div>
+        <div class="searchbar">
+          <input id="fSearch" class="f wide" placeholder="항목 이름으로 검색 (예: 보험료)">
+          <select id="fSearchMonth" class="f"><option value="">전체 월</option></select>
+        </div>
+        <div id="fSearchResult" class="entry-list"></div>
+      </div>
+    </section>
+
+    <!-- ============ 수입·지출·자산 ============ -->
+    <section class="page" id="page-master">
+      <div class="seg" id="masterSeg">
+        <button class="on" data-m="income">수입</button>
+        <button data-m="fixed">고정지출</button>
+        <button data-m="assets">자산</button>
+      </div>
+
+      <div class="msub" id="msub-income">
+        <div class="card accent-mint">
+          <div class="card-h">💵 수입 · 합계 <b id="incSum">0원</b></div>
+          <div id="incList" class="kv-list"></div>
+          <div class="row-add">
+            <select id="incWho" class="f"><option>종진</option><option>은주</option><option>공동</option></select>
+            <input id="incName" class="f" placeholder="항목 (예: 월급)">
+            <input id="incNote" class="f" placeholder="메모 (예: 매월10일)">
+            <input id="incAmt" type="text" inputmode="numeric" class="f" placeholder="금액">
+            <button id="incAdd" class="btn primary">＋</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h">📒 월별 수입 기록 <span class="hint">· 매월 정산 때 저장해 두면 지난 달 수입을 다시 볼 수 있어요</span></div>
+          <div class="searchbar">
+            <select id="ihMonth" class="f"></select>
+            <button id="ihSave" class="btn primary">💾 지금 수입을 이 달 기록으로 저장</button>
+          </div>
+          <div id="ihStatus" class="hint hstatus"></div>
+          <div id="ihList" class="entry-list"></div>
+          <div class="btnrow">
+            <button id="ihExcel" class="btn soft">📊 엑셀로 받기</button>
+            <button id="ihPrint" class="btn soft">🖨️ 출력</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="msub" id="msub-fixed" hidden>
+        <div class="card accent-pink">
+          <div class="card-h">🧾 고정지출(기준) · 합계 <b id="fxSum">0원</b></div>
+          <div class="hint" style="margin:-4px 0 8px">항목 이름을 누르면 담당·항목·계좌번호를 고칠 수 있어요</div>
+          <div id="fxList" class="kv-list"></div>
+          <div class="row-add">
+            <select id="fxWho" class="f"><option>종진</option><option>은주</option><option>공동</option></select>
+            <input id="fxName" class="f wide" placeholder="항목 (예: 폰요금)">
+            <input id="fxAcct" class="f wide" placeholder="계좌번호 (예: 신한 110-123-456789)">
+            <input id="fxAmt" type="text" inputmode="numeric" class="f" placeholder="금액">
+            <button id="fxAdd" class="btn primary">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="msub" id="msub-assets" hidden>
+        <div class="card accent-lav">
+          <div class="card-h">🏦 자산 · 총 <b id="asSum">0원</b></div>
+          <div id="asList" class="kv-list"></div>
+          <div class="row-add">
+            <select id="asGroup" class="f"><option>동산</option><option>부동산</option><option>종진계좌</option><option>은주계좌</option></select>
+            <input id="asName" class="f wide" placeholder="이름 (예: 신한은행)">
+            <input id="asAmt" type="text" inputmode="numeric" class="f" placeholder="금액">
+            <input id="asNote" class="f" placeholder="메모">
+            <button id="asAdd" class="btn primary">＋</button>
+          </div>
+        </div>
+        <div class="card accent-mint">
+          <div class="card-h">📥 생활비 계좌 → 홈 잔고 반영</div>
+          <p class="hint">매월(보통 10일) 자산 금액을 다 맞춘 뒤, 아래에서 <b>생활비 계좌</b>를 고르고 「반영하기」를 누르면 홈의 생활비 잔고가 그 금액으로 맞춰져요. <b>반영한 다음날부터</b> 쓰는 비용이 차감됩니다.</p>
+          <select id="livingPick" class="f wide" style="margin-bottom:8px"></select>
+          <button id="applyLiving" class="btn primary full">📥 반영하기</button>
+          <div id="applyMsg" class="hint"></div>
+        </div>
+        <div class="card">
+          <div class="card-h">📒 월별 자산 기록 <span class="hint">· 「반영하기」를 누르면 이번 달 기록도 자동 저장돼요</span></div>
+          <div class="searchbar">
+            <select id="ahMonth" class="f"></select>
+            <button id="ahSave" class="btn primary">💾 지금 자산을 이 달 기록으로 저장</button>
+          </div>
+          <div id="ahStatus" class="hint hstatus"></div>
+          <div id="ahList" class="entry-list"></div>
+          <div class="btnrow">
+            <button id="ahExcel" class="btn soft">📊 엑셀로 받기</button>
+            <button id="ahPrint" class="btn soft">🖨️ 출력</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 리포트 / 프린트 ============ -->
+    <section class="page" id="page-report">
+      <div class="card">
+        <div class="card-h">🖨️ 리포트 만들기</div>
+        <div class="searchbar">
+          <select id="rpKind" class="f">
+            <option value="m-detail">월별 내역</option>
+            <option value="m-summary">월별 요약</option>
+            <option value="y-detail">연별 내역</option>
+            <option value="y-summary">연별 요약</option>
+            <option value="asset-hist">자산 월별 기록</option>
+            <option value="inc-hist">수입 월별 기록</option>
+          </select>
+          <select id="rpYear" class="f"></select>
+          <select id="rpMonth" class="f"></select>
+          <button id="rpMake" class="btn primary">보기</button>
+          <button id="rpPrint" class="btn soft">🖨️ 프린트</button>
+          <button id="rpExcel" class="btn soft">📊 엑셀</button>
+        </div>
+      </div>
+      <div id="reportOut" class="report"></div>
+    </section>
+  </main>
+
+  <div id="status" class="status" hidden></div>
+</div>
+
+<!-- 출력 전용 영역 (프린트할 때만 보임) -->
+<div id="printArea"></div>
+
+<!-- 고정지출 항목 수정 모달 -->
+<div id="fiModal" class="modal" hidden>
+  <div class="sheet">
+    <div class="sheet-h"><b id="fiTitle">✏️ 고정지출 수정</b><button id="fiClose" class="link">닫기</button></div>
+    <div class="sheet-b">
+      <label class="lab">담당</label><select id="fiWho" class="f wide"><option value="종진">종진</option><option value="은주">은주</option><option value="공동">공동</option></select>
+      <label class="lab">항목</label><input id="fiName" class="f wide">
+      <label class="lab">계좌번호 <span class="hint">(예: 신한 110-123-456789)</span></label><input id="fiAcct" class="f wide" placeholder="어느 계좌에서 나가는지">
+      <label class="lab">금액</label><input id="fiAmt" type="text" inputmode="numeric" class="f wide">
+      <label id="fiSyncRow" class="chk"><input type="checkbox" id="fiSync"> 고정지출(기준)에도 같이 바꾸기</label>
+      <div class="btnrow">
+        <button id="fiSave" class="btn primary">저장</button>
+        <button id="fiDelete" class="btn danger">삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 공유/코드 모달 -->
+<div id="shareModal" class="modal" hidden>
+  <div class="sheet">
+    <div class="sheet-h"><b>👩‍❤️‍👨 커플 가계부 공유</b><button id="shClose" class="link">닫기</button></div>
+    <div class="sheet-b">
+      <p class="hint">두 분이 <b>같은 코드</b>를 입력하면 같은 가계부를 함께 써요. 처음이면 코드를 새로 만드세요.</p>
+      <input id="shCode" class="f wide" placeholder="커플 코드 (예: JJEUNJU-2026)" autocapitalize="characters">
+      <div class="btnrow">
+        <button id="shUse" class="btn primary">이 코드로 시작</button>
+        <button id="shNew" class="btn soft">코드 새로 만들기</button>
+      </div>
+      <hr>
+      <div class="hint">현재 코드: <b id="shCur">(없음)</b></div>
+      <button id="shSeed" class="btn soft full">📥 엑셀(2026년) 데이터 가져오기 (최초 1회)</button>
+      <div id="shSeedMsg" class="hint"></div>
+      <button id="shLeave" class="link danger">이 기기에서 코드 해제</button>
+    </div>
+  </div>
+</div>
+
+<!-- 잔고 설정 모달 -->
+<div id="balModal" class="modal" hidden>
+  <div class="sheet">
+    <div class="sheet-h"><b>💳 <span id="balWho">생활비 계좌</span> 잔고 맞추기</b><button id="balClose" class="link">닫기</button></div>
+    <div class="sheet-b">
+      <p class="hint">생활비 계좌에 <b>실제로 남은 금액</b>을 적어주세요. 이 날짜 <b>다음날부터</b> 현금·종진카드·은주카드로 쓴 지출이 여기서 빠져나갑니다. <br>※ 보통은 「수입·지출·자산 → 자산」 맨 아래 <b>반영하기</b>로 맞추는 걸 추천해요.</p>
+      <label class="lab">현재 잔고(원)</label><input id="balAmount" type="text" inputmode="numeric" class="f wide" placeholder="예: 1500000">
+      <label class="lab">기준 날짜 <span class="hint">(이 날 다음날부터 차감 · 보통 10일)</span></label><input id="balDate" type="date" class="f wide">
+      <div class="btnrow">
+        <button id="balSave" class="btn primary">저장</button>
+        <button id="balClear" class="btn danger">잔고 지우기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 내역 수정 모달 -->
+<div id="editModal" class="modal" hidden>
+  <div class="sheet">
+    <div class="sheet-h"><b>✏️ 내역 수정</b><button id="edClose" class="link">닫기</button></div>
+    <div class="sheet-b">
+      <label class="lab">구분</label><select id="edKind" class="f wide"><option value="out">지출</option><option value="in">입금 (생활비 계좌로 들어옴)</option></select>
+      <label class="lab">날짜</label><input id="edDate" type="date" class="f wide">
+      <label class="lab">금액</label><input id="edAmount" type="text" inputmode="numeric" class="f wide">
+      <div id="edOutFields">
+        <label class="lab">용도</label><select id="edCat" class="f wide"></select>
+        <label class="lab">지불</label><select id="edPay" class="f wide"></select>
+      </div>
+      <label class="lab">내용</label><input id="edDesc" class="f wide">
+      <div class="btnrow">
+        <button id="edSave" class="btn primary">저장</button>
+        <button id="edDelete" class="btn danger">삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="seed.js"></script>
+<script src="accounts.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
