@@ -354,11 +354,13 @@ body{background:var(--paper)}
 @media (max-width:640px){.scards{display:block}.scard{display:none;min-height:60vh}.scard.cur{display:flex;box-shadow:none}.cpager{display:flex}.dims.big input,.dims.big select{font-size:22px;padding:12px}}
 
 /* ---------- 6.1: 큼직한 터치 화면 ---------- */
-.stage{grid-template-rows:auto auto minmax(0,1fr) auto}
+.stage,body[data-screen="result"] .stage{grid-template-rows:auto auto minmax(0,1fr) 28px}
+.stage>.stagebar{grid-row:1}.stage>.emodes{grid-row:2}.stage>.view{grid-row:3}.stage>.status{grid-row:4}
 .emodes{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
 .emodes button{min-height:52px;padding:0 18px;font-size:17px;font-weight:700;border:2px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink)}
 .emodes button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .emodes .ctx{background:var(--panel2)}.emodes .done{margin-left:auto;background:#1f7a46;border-color:#1f7a46;color:#fff}
+.echips{display:flex;flex-wrap:wrap;gap:6px;width:100%;order:5;padding-top:4px}.echips button{min-height:46px;padding:0 14px;font-size:15.5px;font-weight:600;border:2px solid color-mix(in srgb,var(--c) 45%,transparent);border-radius:999px;background:var(--panel)}.echips button[aria-pressed="true"]{background:var(--c);color:#fff;border-color:var(--c)}
 .emodes .ctx-t{align-self:center;font-size:15px;font-weight:600;color:var(--danger)}
 .left{font-size:16px}.left .btn{min-height:46px;font-size:15.5px;padding:0 16px;border-radius:12px}.left .btn.sm{min-height:42px;font-size:15px}
 .left .pb{min-height:48px;font-size:16px;padding:0 16px;border-radius:12px}
@@ -859,6 +861,16 @@ function stairSpec(type, FF, multi, opt = {}) {
   return s;
 }
 const stairOpt = B => ({ w: B.stairW, start: B.stairStart, mir: B.stairMir });
+/** 계단이 실제로 차지하는 바닥 모양 (평면 좌표) */
+function stairPoly(st, x0, y0) {
+  const { sw, len, w } = st, xf = stairXf({ ...st, x0, y0 });
+  let loc;
+  if (st.type === 'L') loc = [[sw - w, 0], [sw, 0], [sw, len], [0, len], [0, len - w], [sw - w, len - w]];
+  else if (st.type === 'O') { const c = sw / 2, r = sw / 2, n = 6, ys = [...Array(n + 1)].map((_, i) => sw * i / n), hw = i => r * Math.sqrt(Math.max(0.05, 1 - Math.pow(((ys[i] + ys[i + 1]) / 2 - c) / r, 2))) + 60; loc = []; for (let i = 0; i < n; i++) loc.push([c + hw(i), ys[i]], [c + hw(i), ys[i + 1]]); for (let i = n - 1; i >= 0; i--) loc.push([c - hw(i), ys[i + 1]], [c - hw(i), ys[i]]); loc = loc.map(([x, y]) => [clamp(x, 0, sw), y]); }
+  else loc = [[0, 0], [sw, 0], [sw, len], [0, len]];
+  const pts = loc.map(([x, y]) => xf(x, y).map(v => Math.round(v)));
+  return pts;
+}
 /** 계단 안쪽 좌표(0..sw, 0..len: 남쪽에서 시작해 북쪽으로 오름) → 평면 좌표 */
 function stairXf(st) {
   const { sw, len, rot, mir, x0, y0 } = st;
@@ -925,7 +937,8 @@ function buildModel(P) {
   const remodel = P.mode === 'remodel', B = remodel ? P.r : P.b;
   if (!remodel && P.b.type === '빌라') return buildVilla(P);
   const floorsIn = remodel ? (P.r.loft.on ? [P.r.fl[0], P.r.loftFl] : [P.r.fl[0]]) : B.fl.slice(0, B.floors);
-  const N = floorsIn.length, FF = B.H + 300, issues = [], warn = [];
+  const N = floorsIn.length, FF = remodel && N > 1 ? Math.max(2100, B.H - 1200) : B.H + 300, issues = [], warn = [];
+  if (remodel && N > 1 && B.H < 3300) addIssue(issues, `복층을 넣으려면 실내 높이가 3,300mm 이상이어야 복층 위 1,200mm가 확보됩니다 (지금 ${fmt(B.H)}mm).`, [], { level: 'err' });
   const st = N > 1 ? stairSpec(B.stair, FF, false, stairOpt(B)) : null;
   const ew = Math.max(1400, Math.min(2600, (B.front ? B.front.w : 900) + 600));
   const spec = { type: remodel ? '리모델링' : P.b.type, roof: remodel ? 'none' : P.b.roof, pitch: remodel ? 0 : P.b.pitch, wallMat: remodel ? 'stucco_w' : P.b.wallMat, roofMat: remodel ? 'metal_d' : P.b.roofMat, H: B.H, floors: N, remodel };
@@ -943,7 +956,8 @@ function buildModel(P) {
       fm.Hf = 1200; const f0 = M.floors[0], W0 = f0.W, D0 = f0.D;
       const lx = clamp(P.r.loft.x ?? (W0 - W), 0, Math.max(0, W0 - W)), ly = clamp(P.r.loft.y ?? (D0 - D), 0, Math.max(0, D0 - D));
       shiftFloorXY(fm, lx, ly); fm.loftRect = { x0: lx, y0: ly, x1: lx + W, y1: ly + D }; fm.ox = lx; fm.oy = ly;
-      if (f0.stair) loftLanding(M, f0.stair, fm, err0 => addIssue(fm.issues, '복층: ' + err0, [], { level: 'info' }));
+      if (f0.stair) loftLanding(M, f0.stair, fm, (err0, lv) => addIssue(fm.issues, '복층: ' + err0, [], { level: lv || 'info' }), f0);
+      fm.walls = []; fm.rails = loftRails(fm, f0);
     }
     if (i === 0 && st) stairY = fm.stairY;
     fm.level = i; fm.name = remodel && i === 1 ? '복층' : `${i + 1}층`; fm.z0 = i * FF; if (!fm.loftRect) { fm.W = W; fm.D = D; }
@@ -1350,7 +1364,7 @@ function layoutBlocks(M, f, o) {
   const err = (msg, fixes, lvl = 'err') => addIssue(m.issues, pre + msg, fixes, { level: lvl });
   const st = o.st, PB = M.P && (M.P.mode === 'remodel' ? M.P.r : M.P.b), sharedStair = PB && PB.stairAt, sharedEv = PB && PB.evAt;
   const blocks = f.blocks.filter(b => (b.ref !== 'stair' || st) && (b.ref !== 'ev' || o.ev)).map(b => {
-    if (b.ref === 'stair' && st) return { ...b, pts: null, w: st.fw, d: st.fd, ...(sharedStair ? { x: sharedStair.x, y: sharedStair.y } : {}) };
+    if (b.ref === 'stair' && st) { const x = sharedStair ? sharedStair.x : b.x, y = sharedStair ? sharedStair.y : b.y; return { ...b, x, y, w: st.fw, d: st.fd, pts: stairPoly(st, x, y) }; }
     if (b.ref === 'ev') return { ...b, pts: null, w: 1900, d: 2100, ...(sharedEv ? { x: sharedEv.x, y: sharedEv.y } : {}) };
     return b;
   });
@@ -1459,7 +1473,7 @@ function layoutBlocks(M, f, o) {
   const en = placed.find(b => b.ref === 'entry'); if (en && en.room) m.stepLines.push({ h: true, x0: en.room.x0 + 100, x1: en.room.x1 - 100, y: en.room.y1 - 200 });
   const lv = placed.find(b => b.ref === 'living');
   m.livingX0 = lv && lv.room ? lv.room.x0 : 0; m.ys0 = lv && lv.room && lv.room.y0 === 0 ? 0 : 1; m.ys1 = D;
-  m.blocksPlaced = placed.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, d: b.d, doorPt: b.doorPt || null }));
+  m.blocksPlaced = placed.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, d: b.d, doorPt: b.doorPt || null, pts: b.ref === 'stair' ? b.pts : null }));
   // 가구 (자동 배치 뒤, 사용자가 옮긴 자리 적용)
   for (const r of m.rooms) { if (r.part || r.kind === 'hall') continue; const n0 = m.furn.length; furnishV4(m, r, f, o, err);
     const store = furnPosStore(f, r.key) || {}, cnt = {};
@@ -1520,10 +1534,21 @@ function shiftFloorXY(fm, dx, dy) {
   (fm.blocksPlaced || []).forEach(b => { b.x += dx; b.y += dy; if (b.doorPt) b.doorPt = [b.doorPt[0] + dx, b.doorPt[1] + dy]; });
 }
 /** 계단 끝과 복층 사이가 떨어져 있으면 계단참으로 잇는다 */
-function loftLanding(M, S, fm, note) {
+function loftLanding(M, S0, fm, note, f0) {
+  // 계단을 다 올라온 자리(내리는 곳) 앞 w×900을 출발점으로 삼는다
+  const ex = stairExit(S0), w = S0.w, dep = 900, [px, py] = ex.pt, W0 = f0.W, D0 = f0.D;
+  let E = ex.dir === 'n' ? { x0: px - w / 2, y0: S0.y1, x1: px + w / 2, y1: S0.y1 + dep } : ex.dir === 's' ? { x0: px - w / 2, y0: S0.y0 - dep, x1: px + w / 2, y1: S0.y0 } : ex.dir === 'e' ? { x0: S0.x1, y0: py - w / 2, x1: S0.x1 + dep, y1: py + w / 2 } : { x0: S0.x0 - dep, y0: py - w / 2, x1: S0.x0, y1: py + w / 2 };
+  if (E.x0 < 0 || E.y0 < 0 || E.x1 > W0 || E.y1 > D0) E = ex.dir === 'n' ? { x0: px - w / 2, y0: S0.y1 - dep, x1: px + w / 2, y1: S0.y1 } : ex.dir === 's' ? { x0: px - w / 2, y0: S0.y0, x1: px + w / 2, y1: S0.y0 + dep } : ex.dir === 'e' ? { x0: S0.x1 - dep, y0: py - w / 2, x1: S0.x1, y1: py + w / 2 } : { x0: S0.x0, y0: py - w / 2, x1: S0.x0 + dep, y1: py + w / 2 };
+  E = { x0: Math.round(clamp(E.x0, 0, W0)), y0: Math.round(clamp(E.y0, 0, D0)), x1: Math.round(clamp(E.x1, 0, W0)), y1: Math.round(clamp(E.y1, 0, D0)) };
+  const Lr = fm.loftRect, hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  { const [x0, x1] = [Math.max(S0.x0, Lr.x0), Math.min(S0.x1, Lr.x1)], [y0, y1] = [Math.max(S0.y0, Lr.y0), Math.min(S0.y1, Lr.y1)]; if (x1 - x0 > 50 && y1 - y0 > 50) fm.hole = { x0, y0, x1, y1 }; }
+  const insideLoft = E.x0 >= Lr.x0 - 1 && E.x1 <= Lr.x1 + 1 && E.y0 >= Lr.y0 - 1 && E.y1 <= Lr.y1 + 1;
+  if (insideLoft) { if (fm.hole) { const H = fm.hole; fm.hole = null; const cut = [{ x0: H.x0, y0: H.y0, x1: H.x1, y1: H.y1 }]; fm.hole = cut[0]; } fm.landings = []; return; }
+  const S = E; fm.landings = [E];
+  if (hit(E, Lr) || (Math.max(0, Lr.x0 - E.x1, E.x0 - Lr.x1) === 0 && Math.max(0, Lr.y0 - E.y1, E.y0 - Lr.y1) === 0)) { fm.rooms.push({ key: 'landing0', name: '계단참', kind: 'landing', ...E }); return; }
   const L = fm.loftRect, gx = Math.max(0, L.x0 - S.x1, S.x0 - L.x1), gy = Math.max(0, L.y0 - S.y1, S.y0 - L.y1), out = [];
   const ov = (a0, a1, b0, b1) => [Math.max(a0, b0), Math.min(a1, b1)];
-  if (!gx && !gy) { const [x0, x1] = ov(S.x0, S.x1, L.x0, L.x1), [y0, y1] = ov(S.y0, S.y1, L.y0, L.y1); if (x1 - x0 > 50 && y1 - y0 > 50) fm.hole = { x0, y0, x1, y1 }; return; }
+  if (!gx && !gy) { fm.landings = [E]; fm.rooms.push({ key: 'landing0', name: '계단참', kind: 'landing', ...E }); return; }
   const w2 = 1100;
   if (gx >= gy) { const right = S.x1 <= L.x0, xa = right ? S.x1 : L.x1, xb = right ? L.x0 : S.x0; let [y0, y1] = ov(S.y0, S.y1, L.y0, L.y1);
     if (y1 - y0 >= 900) out.push({ x0: xa, y0, x1: xb, y1 });
@@ -1531,9 +1556,48 @@ function loftLanding(M, S, fm, note) {
   else { const top = S.y1 <= L.y0, ya = top ? S.y1 : L.y1, yb = top ? L.y0 : S.y0; let [x0, x1] = ov(S.x0, S.x1, L.x0, L.x1);
     if (x1 - x0 >= 900) out.push({ x0, y0: Math.min(ya, yb), x1, y1: Math.max(ya, yb) });
     else { x0 = S.x0; x1 = S.x1; const ye = top ? yb + w2 : yb - w2; out.push({ x0, y0: Math.min(ya, ye), x1, y1: Math.max(ya, ye) }); const rt = x1 <= L.x0, xa = rt ? x1 : L.x1, xb = rt ? L.x0 : x0; out.push({ x0: Math.min(xa, xb), y0: Math.min(yb, ye), x1: Math.max(xa, xb), y1: Math.max(yb, ye) }); } }
+  out.unshift(E);
   out.filter(r => r.x1 - r.x0 > 50 && r.y1 - r.y0 > 50).forEach((r, k) => fm.rooms.push({ key: 'landing' + k, name: k ? '' : '계단참', kind: 'landing', ...r }));
   fm.landings = out;
   const len = Math.max(gx, gy); if (len > 3000) note(`계단과 복층이 ${fmt(len)}mm 떨어져 계단참이 깁니다. 복층을 계단 가까이 옮기면 짧아집니다.`);
+}
+
+/** 계단을 다 올라와 내리는 곳(평면 좌표)과 나가는 방향 */
+function stairExit(st) {
+  const { sw, len, w } = st, xf = stairXf(st);
+  let p, v;
+  if (st.type === 'I') { p = [sw / 2, len - 10]; v = [0, 1]; }
+  else if (st.type === 'U') { p = [sw / 4, 10]; v = [0, -1]; }
+  else if (st.type === 'L') { p = [10, len - w / 2]; v = [-1, 0]; }
+  else { const a = 234 * Math.PI / 180, c = sw / 2; p = [c + c * 0.7 * Math.cos(a), c + c * 0.7 * Math.sin(a)]; v = [0, -1]; }
+  const P = xf(p[0], p[1]), Q = xf(p[0] + v[0] * 100, p[1] + v[1] * 100), dx = Q[0] - P[0], dy = Q[1] - P[1];
+  return { pt: P, dir: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : (dy > 0 ? 'n' : 's') };
+}
+/** 복층 난간: 걸을 수 있는 곳(복층+계단참-계단 구멍)의 테두리. 방 바깥벽에 붙은 곳과 계단을 올라와 들어오는 쪽은 비움 */
+function loftRails(fm, f0) {
+  const L = fm.loftRect, S = f0.stair, W0 = f0.W, D0 = f0.D, hole = fm.hole, lands = fm.landings || [];
+  const xsS = new Set([L.x0, L.x1]), ysS = new Set([L.y0, L.y1]);
+  for (const r of [...lands, ...(hole ? [hole] : []), ...(S ? [S] : [])]) { xsS.add(r.x0); xsS.add(r.x1); ysS.add(r.y0); ysS.add(r.y1); }
+  const xs = [...xsS].sort((a, b) => a - b), ys = [...ysS].sort((a, b) => a - b), nx = xs.length - 1, ny = ys.length - 1;
+  const inR = (r, x, y) => r && x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1;
+  const walk = (i, j) => { if (i < 0 || j < 0 || i >= nx || j >= ny) return false; const x = (xs[i] + xs[i + 1]) / 2, y = (ys[j] + ys[j + 1]) / 2; return (inR(L, x, y) || lands.some(r => inR(r, x, y))) && !inR(hole, x, y); };
+  const ex = S ? stairExit(S) : null, segs = [];
+  const skip = (o, c, a, b, ox, oy, nrm) => {
+    if (o === 'v' && (Math.abs(c) < 1 || Math.abs(c - W0) < 1)) return true;
+    if (o === 'h' && (Math.abs(c) < 1 || Math.abs(c - D0) < 1)) return true;
+    if (S && inR(S, ox, oy)) { if (ex && nrm === { n: 's', s: 'n', e: 'w', w: 'e' }[ex.dir] && (o === 'h' ? ex.pt[0] > a - 1200 && ex.pt[0] < b + 1200 : ex.pt[1] > a - 1200 && ex.pt[1] < b + 1200)) return true; }
+    return false;
+  };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    if (!walk(i, j)) continue; const cx = (xs[i] + xs[i + 1]) / 2, cy = (ys[j] + ys[j + 1]) / 2;
+    if (!walk(i, j - 1) && !skip('h', ys[j], xs[i], xs[i + 1], cx, ys[j] - 1, 's')) segs.push({ o: 'h', c: ys[j], a: xs[i], b: xs[i + 1] });
+    if (!walk(i, j + 1) && !skip('h', ys[j + 1], xs[i], xs[i + 1], cx, ys[j + 1] + 1, 'n')) segs.push({ o: 'h', c: ys[j + 1], a: xs[i], b: xs[i + 1] });
+    if (!walk(i - 1, j) && !skip('v', xs[i], ys[j], ys[j + 1], xs[i] - 1, cy, 'w')) segs.push({ o: 'v', c: xs[i], a: ys[j], b: ys[j + 1] });
+    if (!walk(i + 1, j) && !skip('v', xs[i + 1], ys[j], ys[j + 1], xs[i + 1] + 1, cy, 'e')) segs.push({ o: 'v', c: xs[i + 1], a: ys[j], b: ys[j + 1] });
+  }
+  segs.sort((p, q) => (p.o > q.o ? 1 : p.o < q.o ? -1 : 0) || p.c - q.c || p.a - q.a);
+  const out = []; for (const sg of segs) { const l = out[out.length - 1]; if (l && l.o === sg.o && l.c === sg.c && Math.abs(l.b - sg.a) < 1) l.b = sg.b; else out.push({ ...sg }); }
+  return out.filter(r => r.b - r.a > 50);
 }
 
 /* ===================== 03b. 도면 파일 불러오기 (DXF는 바로, DWG는 libredwg-web) ===================== */
@@ -1709,6 +1773,8 @@ function buildSolids(m) {
       L('floor', fmat, boxF(I.x0, I.y0, -50, I.x1, I.y1, 0), { room: r.key });
     }
     if (fm.segs) { for (const g of fm.segs) { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, l = Math.hypot(dx, dy); if (l < 20) continue; const nx = -dy / l * 30, ny = dx / l * 30; L('wall', 'wallInt', prismF([[g.x1 + nx, g.y1 + ny], [g.x2 + nx, g.y2 + ny], [g.x2 - nx, g.y2 - ny], [g.x1 - nx, g.y1 - ny]], 'z', 0, H)); } }
+    for (const r of (fm.rails || [])) { const hz = r.o === 'h', box = (a0, a1, t, z0, z1, mat) => L('rail', mat, hz ? boxF(a0, r.c - t, z0, a1, r.c + t, z1) : boxF(r.c - t, a0, z0, r.c + t, a1, z1));
+      box(r.a, r.b, 12, 60, 1000, 'glass'); box(r.a, r.b, 30, 1000, 1060, 'frame'); const n = Math.max(1, Math.round((r.b - r.a) / 1200)); for (let k = 0; k <= n; k++) { const p = r.a + (r.b - r.a) * k / n; box(clamp(p - 25, r.a, r.b - 50), clamp(p + 25, r.a + 50, r.b), 25, 0, 1000, 'frame'); } }
     if (!fm.piloti && !fm.imported && !fm.loftRect) L('ceiling', 'ceiling', boxF(100, 100, H, fm.W - 100, (fm.D || D) - 100, H + 20));
     for (const w of fm.walls) {
       const mat = w.ext ? 'wallExt' : 'wallInt', ops = [...w.ops].sort((a, b) => a.a - b.a);
@@ -2062,7 +2128,12 @@ function planPrims(M, fi = 0) {
       else if (p.t === 'a') { [p.cx, p.cy] = xf(p.cx, p.cy); let a0 = p.a0, a1 = p.a1; if (sw0.mir) { [a0, a1] = [180 - a1, 180 - a0]; } p.a0 = a0 + rot; p.a1 = a1 + rot; }
       else if (p.t === 't') { [p.x, p.y] = xf(p.x, p.y + p.h / 2); p.y -= p.h / 2; }
     } }
-  if (m.loftRect) { const lw = M.floors[0]; if (lw.stair) g.r('aux', lw.stair.x0, lw.stair.y0, lw.stair.x1, lw.stair.y1, { dash: 1 }); for (const q of (m.landings || [])) { g.r('stair', q.x0, q.y0, q.x1, q.y1); g.l('stair', q.x0, q.y0, q.x1, q.y1); } }
+  if (m.loftRect) { const lw = M.floors[0];
+    for (const w of lw.walls) { const t = w.t / 2; if (w.o === 'h') g.r('aux', w.a, w.c - t, w.b, w.c + t, { dash: 1 }); else g.r('aux', w.c - t, w.a, w.c + t, w.b, { dash: 1 }); }
+    if (lw.stair) { const n0 = g.out.length, sw0 = lw.stair, loc = { ...sw0, x0: 0, y0: 0, x1: sw0.sw, y1: sw0.len }, xf = stairXf(sw0); stairPlan(g, loc, M.FF, 0, 1); for (const p of g.out.slice(n0)) { p.L = 'aux'; p.o = { ...(p.o || {}), dash: 1 }; if (p.t === 'l') { [p.x1, p.y1] = xf(p.x1, p.y1); [p.x2, p.y2] = xf(p.x2, p.y2); } else if (p.t === 'p') p.pts = p.pts.map(q => xf(q[0], q[1])); else if (p.t === 'c') [p.cx, p.cy] = xf(p.cx, p.cy); else if (p.t === 'a') { [p.cx, p.cy] = xf(p.cx, p.cy); p.a0 += sw0.rot || 0; p.a1 += sw0.rot || 0; } else if (p.t === 't') { g.out.splice(g.out.indexOf(p), 1); } } g.tx('label', (sw0.x0 + sw0.x1) / 2, sw0.y0 - 260, '아래층 계단', 150, 'middle', { halo: 1 }); }
+    for (const r of (m.rails || [])) { if (r.o === 'h') { g.l('wall', r.a, r.c - 30, r.b, r.c - 30); g.l('wall', r.a, r.c + 30, r.b, r.c + 30); } else { g.l('wall', r.c - 30, r.a, r.c - 30, r.b); g.l('wall', r.c + 30, r.a, r.c + 30, r.b); } }
+    if ((m.rails || []).length) { const r = m.rails[0]; g.tx('label', r.o === 'h' ? (r.a + r.b) / 2 : r.c + 250, r.o === 'h' ? r.c + 220 : (r.a + r.b) / 2, '난간 h1,000', 120, 'middle', { halo: 1 }); }
+    if (false) g.r('aux', lw.stair.x0, lw.stair.y0, lw.stair.x1, lw.stair.y1, { dash: 1 }); for (const q of (m.landings || [])) { g.r('stair', q.x0, q.y0, q.x1, q.y1); g.l('stair', q.x0, q.y0, q.x1, q.y1); } }
   if (fi === 0 && M.floors[1] && M.floors[1].loftRect) { const q = M.floors[1].loftRect; g.r('aux', q.x0, q.y0, q.x1, q.y1, { dash: 1 }); g.tx('label', (q.x0 + q.x1) / 2, q.y1 - 450, '복층 (위)', 180, 'middle', { halo: 1 }); }
   if (m.zoneLines) for (const z of m.zoneLines) { const x = typeof z === 'number' ? z : z.x, y0 = typeof z === 'number' ? m.ys0 : z.y0, y1 = typeof z === 'number' ? m.ys1 : z.y1; g.l('aux', x, y0 + 100, x, y1 - 100, { dash: 1 }); }
   if (m.segs) for (const sg of m.segs) g.l('wall', sg.x1, sg.y1, sg.x2, sg.y2, { heavy: 1 });
@@ -3003,12 +3074,12 @@ function drawBlocks() {
   let h = '';
   for (const b of f.blocks) {
     if (villaB && (b.ref === 'stair' || b.ref === 'ev')) continue;
-    const sp = f.spaces.find(q => q.id === b.ref), kind = sp ? sp.kind : b.ref, col = BCOL[kind] || '#5d6762', bad = un.has(b.id), pts = ptsOf(b), lab = blockLabel(b, f);
+    const sp = f.spaces.find(q => q.id === b.ref), kind = sp ? sp.kind : b.ref, col = BCOL[kind] || '#5d6762', bad = un.has(b.id), pl = placed.get(b.id), pts = (b.ref === 'stair' && pl && pl.pts && !(ST.drag && ST.drag.b === b)) ? pl.pts : ptsOf(b), lab = blockLabel(b, f);
     const cx = b.x + b.w / 2 + ox, cy = b.y + b.d / 2;
-    const isSel = ST.selB === b; h += `<polygon points="${pts.map(p => `${p[0] + ox},${-p[1]}`).join(' ')}" style="fill:${col};fill-opacity:${bad ? .05 : isSel ? .3 : ST.emode === 'space' ? .14 : .06};stroke:${bad ? 'var(--danger)' : col};stroke-width:${isSel ? 4 : 2.2}px;${bad ? 'stroke-dasharray:8 5;' : ''}vector-effect:non-scaling-stroke"/>`;
+    const isSel = ST.selB === b, dim = ST.emode === 'space' && ST.selB && !isSel; h += `<polygon points="${pts.map(p => `${p[0] + ox},${-p[1]}`).join(' ')}" style="fill:${col};fill-opacity:${bad ? .05 : isSel ? .3 : dim ? .04 : ST.emode === 'space' ? .14 : .06};stroke:${bad ? 'var(--danger)' : col};stroke-opacity:${dim ? .35 : 1};stroke-width:${isSel ? 4.5 : 2}px;${bad ? 'stroke-dasharray:8 5;' : ''}vector-effect:non-scaling-stroke"/>`;
     h += `<text x="${cx}" y="${-cy + 5 * s}" font-size="${14 * s}" text-anchor="middle" style="fill:${bad ? 'var(--danger)' : col};font-weight:700;paint-order:stroke;stroke:var(--canvas);stroke-width:${4 * s}px;pointer-events:none">${SPACE_ICON[kind] || ''} ${esc(lab)}${bad ? ' (반영 안 됨)' : ''}</text>`;
     h += `<text x="${cx}" y="${-cy + 22 * s}" font-size="${11.5 * s}" text-anchor="middle" style="fill:var(--ink);paint-order:stroke;stroke:var(--canvas);stroke-width:${4 * s}px;pointer-events:none">${fmt(b.w)}×${fmt(b.d)}</text>`;
-    if (ST.emode === 'space' && b.ref !== 'stair' && b.ref !== 'ev') pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length]; if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 200) return; h += `<rect x="${(p[0] + q[0]) / 2 + ox - 5 * s}" y="${-(p[1] + q[1]) / 2 - 5 * s}" width="${10 * s}" height="${10 * s}" style="fill:var(--canvas);stroke:${col};stroke-width:2px;vector-effect:non-scaling-stroke"/>`; });
+    if (ST.emode === 'space' && isSel && b.ref !== 'stair' && b.ref !== 'ev') pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length]; if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 200) return; h += `<rect x="${(p[0] + q[0]) / 2 + ox - 9 * s}" y="${-(p[1] + q[1]) / 2 - 9 * s}" width="${18 * s}" height="${18 * s}" style="fill:var(--canvas);stroke:${col};stroke-width:2px;vector-effect:non-scaling-stroke"/>`; });
   }
   if (ST.P.mode === 'remodel' && fi === 1 && fm && fm.loftRect) { const L = ST.drag && ST.drag.mode === 'loft' ? ST.drag.cur : fm.loftRect; h += `<rect x="${L.x0}" y="${-L.y1}" width="${L.x1 - L.x0}" height="${L.y1 - L.y0}" style="fill:#7a4cc2;fill-opacity:.12;stroke:#7a4cc2;stroke-width:3px;vector-effect:non-scaling-stroke;cursor:move"/><text x="${(L.x0 + L.x1) / 2}" y="${-(L.y0 + L.y1) / 2}" font-size="${15 * s}" text-anchor="middle" style="fill:#7a4cc2;font-weight:700;paint-order:stroke;stroke:var(--canvas);stroke-width:${4 * s}px">🪟 복층 — 끌어서 옮기기</text>`; }
   if (ST.emode === 'furn') for (const { q } of editFurn()) { const sel = ST.selF && ST.selF.fk === q.fk && ST.selF.rk === q.rk, r = ST.drag && ST.drag.fq === q ? ST.drag.cur : q; h += `<rect x="${r.x0}" y="${-r.y1}" width="${r.x1 - r.x0}" height="${r.y1 - r.y0}" style="fill:${sel ? 'rgba(36,83,196,.22)' : 'rgba(36,83,196,.05)'};stroke:var(--accent);stroke-width:${sel ? 2.5 : 1.2}px;stroke-dasharray:${sel ? 'none' : '4 3'};vector-effect:non-scaling-stroke;pointer-events:none"/>`; }
@@ -3021,6 +3092,10 @@ function blockHit(mx, my) {
   const placed = new Map(((fm && fm.blocksPlaced) || []).map(b => [b.id, b])), list = [...bs.f.blocks].reverse().sort((p, q) => (p.fill ? 1 : 0) - (q.fill ? 1 : 0)), lx = mx - ox;
   if (ST.emode === 'furn') { for (const fq of editFurn().reverse()) { const q = fq.q; if (mx >= q.x0 && mx <= q.x1 && my >= q.y0 && my <= q.y1) return { mode: 'furn', fq: q, room: fq.room }; } return null; }
   if (ST.emode !== 'space') return null;
+  { const b = ST.selB && bs.f.blocks.includes(ST.selB) ? ST.selB : null; if (!b) return null;
+    if (b.ref === 'stair' || b.ref === 'ev') { const r = placed.get(b.id) || b, pts = r.pts || ptsOf(b); return inPoly(pts, lx, my) || (lx >= r.x && lx <= r.x + r.w && my >= r.y && my <= r.y + r.d) ? { b, mode: 'move' } : null; }
+    const pts = ptsOf(b); for (let k = 0; k < pts.length; k++) { const p = pts[k], q = pts[(k + 1) % pts.length]; if (p[0] === q[0] && p[1] === q[1]) continue; const vert = p[0] === q[0], dd = vert ? Math.abs(lx - p[0]) : Math.abs(my - p[1]), inR = vert ? my >= Math.min(p[1], q[1]) && my <= Math.max(p[1], q[1]) : lx >= Math.min(p[0], q[0]) && lx <= Math.max(p[0], q[0]); if (dd < 12 * s && inR) return { b, mode: 'edge', e: k, vert }; }
+    return inPoly(pts, lx, my) ? { b, mode: 'move' } : null; }
   if (false) for (const fq of editFurn().reverse()) { const q = fq.q; if (mx >= q.x0 && mx <= q.x1 && my >= q.y0 && my <= q.y1) return { mode: 'furn', fq: q, room: fq.room }; }
   for (const b of list) { if (b.ref === 'stair' || b.ref === 'ev') continue; const pts = ptsOf(b); for (let k = 0; k < pts.length; k++) { const p = pts[k], q = pts[(k + 1) % pts.length]; if (p[0] === q[0] && p[1] === q[1]) continue; const vert = p[0] === q[0], dd = vert ? Math.abs(lx - p[0]) : Math.abs(my - p[1]), inR = vert ? my >= Math.min(p[1], q[1]) && my <= Math.max(p[1], q[1]) : lx >= Math.min(p[0], q[0]) && lx <= Math.max(p[0], q[0]); if (dd < 9 * s && inR) return { b, mode: 'edge', e: k, vert }; } }
   for (const b of list) if (inPoly(ptsOf(b), lx, my)) return { b, mode: 'move' };
@@ -3032,7 +3107,7 @@ function dragBlock(mx, my) {
   if (d.mode === 'furn') { const q = d.fq, R = d.room, w = q.x1 - q.x0, dd = q.y1 - q.y0, I = { x0: R.x0 + 50, y0: R.y0 + 50, x1: R.x1 - 50, y1: R.y1 - 50 }; let x = r10(q.x0 + mx - d.start[0]), y = r10(q.y0 + my - d.start[1]); for (const e of [I.x0, I.x1 - w]) if (Math.abs(x - e) < 120) x = e; for (const e of [I.y0, I.y1 - dd]) if (Math.abs(y - e) < 120) y = e; d.cur = { x0: x, y0: y, x1: x + w, y1: y + dd }; d.moved = true; drawBlocks(); return; }
   if (d.mode === 'loft') { const f0 = ST.M.floors[0], w = d.cur.x1 - d.cur.x0, h = d.cur.y1 - d.cur.y0; let x = r10(d.orig.x + mx - d.start[0]), y = r10(d.orig.y + my - d.start[1]); const S = f0.stair; for (const e of [0, f0.W - w, ...(S ? [S.x1, S.x0 - w] : [])]) if (Math.abs(x - e) < 200) x = e; for (const e of [0, f0.D - h, ...(S ? [S.y1, S.y0 - h] : [])]) if (Math.abs(y - e) < 200) y = e; x = clamp(x, 0, f0.W - w); y = clamp(y, 0, f0.D - h); d.cur = { x0: x, y0: y, x1: x + w, y1: y + h }; d.moved = true; drawBlocks(); return; }
   const b = d.b, { W, D } = floorDims(curPlanFloor()), f = blocksOfSheet().f, near = magnet(b, f, W, D), dx = mx - d.start[0], dy = my - d.start[1], P0 = d.pts;
-  if (d.mode === 'move') { const x0 = Math.min(...P0.map(p => p[0])), y0 = Math.min(...P0.map(p => p[1])), w = Math.max(...P0.map(p => p[0])) - x0, dd = Math.max(...P0.map(p => p[1])) - y0;
+  if (d.mode === 'move') { if ((b.ref === 'stair' || b.ref === 'ev') && !d.fix) { d.fix = 1; } const x0 = Math.min(...P0.map(p => p[0])), y0 = Math.min(...P0.map(p => p[1])), w = Math.max(...P0.map(p => p[0])) - x0, dd = Math.max(...P0.map(p => p[1])) - y0;
     const xa = near(x0 + dx, 'x'), xb = near(x0 + dx + w, 'x') - w, nx = Math.abs(xa - (x0 + dx)) <= Math.abs(xb - (x0 + dx)) ? xa : xb, ya = near(y0 + dy, 'y'), yb = near(y0 + dy + dd, 'y') - dd, ny = Math.abs(ya - (y0 + dy)) <= Math.abs(yb - (y0 + dy)) ? ya : yb;
     const pts = P0.map(p => [p[0] + nx - x0, p[1] + ny - y0]); b.x = nx; b.y = ny; if (b.pts) b.pts = pts; }
   else { const pts = P0.map(p => [...p]), k = d.e, k2 = (k + 1) % pts.length; if (d.vert) { const v = near(P0[k][0] + dx, 'x'); pts[k][0] = v; pts[k2][0] = v; } else { const v = near(P0[k][1] + dy, 'y'); pts[k][1] = v; pts[k2][1] = v; } b.pts = pts; const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]); b.x = Math.min(...xs); b.y = Math.min(...ys); b.w = Math.max(...xs) - b.x; b.d = Math.max(...ys) - b.y; }
@@ -3056,16 +3131,17 @@ function dropBlock() {
   if (ST.open.s3 || ST.open.s4) renderWizard();
 }
 const EMODES = { space: '▢ 공간 크기·위치', furn: '🪑 가구', door: '🚪 문' };
-function setEmode(k) { ST.emode = k; ST.selF = null; ST.selB = null; renderEmodes(); drawBlocks(); toast({ space: '공간을 끌어 옮기고, 변의 네모로 크기를, 변을 두 번 눌러 꺾인 모양을 만드세요.', furn: '가구를 끌어 옮기고, 두 번 눌러 돌리세요.', door: '공간을 누른 뒤, 문을 낼 벽을 누르세요.' }[k], 4000); }
+function setEmode(k) { ST.emode = k; ST.selF = null; ST.selB = null; renderEmodes(); drawBlocks(); toast({ space: '위에서 편집할 공간 버튼을 고르세요. 고른 공간만 움직입니다.', furn: '가구를 끌어 옮기고, 두 번 눌러 돌리세요.', door: '공간을 누른 뒤, 문을 낼 벽을 누르세요.' }[k], 4000); }
 function renderEmodes() {
   const E = $('#emodes'); if (!E) return; E.hidden = !ST.edit || ST.view !== '2d';
   const sel = ST.selB, selF = ST.selF;
   E.innerHTML = Object.entries(EMODES).map(([k, v]) => `<button data-em="${k}" aria-pressed="${ST.emode === k}">${v}</button>`).join('') +
+    (ST.emode === 'space' && blocksOfSheet() ? `<div class="echips">${blocksOfSheet().f.blocks.filter(b => !(ST.P.mode === 'building' && ST.P.b.type === '빌라' && (b.ref === 'stair' || b.ref === 'ev'))).map(b => { const f = blocksOfSheet().f, sp = f.spaces.find(q => q.id === b.ref), kind = sp ? sp.kind : b.ref; return `<button data-esel="${b.id}" aria-pressed="${sel === b}" style="--c:${BCOL[kind] || '#5d6762'}">${SPACE_ICON[kind] || ''} ${esc(blockLabel(b, f))}</button>`; }).join('')}</div>` : '') +
     (ST.emode === 'space' && sel && sel.pts ? '<button class="ctx" data-ex="rect">⬜ 사각형으로</button>' : '') +
     (ST.emode === 'furn' && selF ? '<button class="ctx" data-ex="rot">⟳ 돌리기</button><button class="ctx" data-ex="auto">↺ 자동 위치</button>' : '') +
     (ST.emode === 'door' && sel ? `<span class="ctx-t">${esc(blockLabel(sel, blocksOfSheet().f))}: 문 낼 벽을 누르세요</span><button class="ctx" data-ex="dauto">↺ 문 자동</button>` : '') +
     '<button class="ctx done" data-ex="end">✓ 편집 끝</button>';
-  E.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.em) return setEmode(b.dataset.em); const x = b.dataset.ex;
+  E.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.em) return setEmode(b.dataset.em); if (b.dataset.esel) { const bb = blocksOfSheet().f.blocks.find(q => q.id === b.dataset.esel); ST.selB = ST.selB === bb ? null : bb; renderEmodes(); drawBlocks(); if (ST.selB && !['stair', 'ev'].includes(bb.ref)) focusCardQuiet(bb.ref); return; } const x = b.dataset.ex;
     if (x === 'rect' && ST.selB) { const bb = ST.selB; delete bb.pts; bb.touched = true; rebuild(true); renderEmodes(); toast('사각형으로 되돌렸습니다.'); }
     if (x === 'rot') rotateSel(); if (x === 'auto') autoSel();
     if (x === 'dauto' && ST.selB) { const door = doorOf(ST.selB); if (door) { delete door.pt; delete door.at; rebuild(true); } }
@@ -3089,16 +3165,18 @@ function editDown(mx, my) {
   }
   const hit = blockHit(mx, my);
   if (hit && hit.mode === 'furn') { ST.selF = { fk: hit.fq.fk, rk: hit.fq.rk }; ST.drag = { mode: 'furn', fq: hit.fq, room: hit.room, start: [mx, my], cur: { x0: hit.fq.x0, y0: hit.fq.y0, x1: hit.fq.x1, y1: hit.fq.y1 } }; renderEmodes(); drawBlocks(); return true; }
-  if (hit) { ST.selB = hit.b; ST.drag = { b: hit.b, mode: hit.mode, e: hit.e, vert: hit.vert, start: [mx, my], pts: ptsOf(hit.b) }; renderEmodes(); return true; }
-  ST.selF = null; ST.selB = null; renderEmodes(); drawBlocks(); return false;
+  if (hit) { ST.drag = { b: hit.b, mode: hit.mode, e: hit.e, vert: hit.vert, start: [mx, my], pts: hit.b.ref === 'stair' || hit.b.ref === 'ev' ? [[hit.b.x, hit.b.y], [hit.b.x + hit.b.w, hit.b.y], [hit.b.x + hit.b.w, hit.b.y + hit.b.d], [hit.b.x, hit.b.y + hit.b.d]] : ptsOf(hit.b) }; return true; }
+  if (ST.emode === 'space') { if (!ST.selB) toast('위의 공간 버튼을 눌러 편집할 공간을 먼저 고르세요.', 2500); return false; }
+  ST.selF = null; renderEmodes(); drawBlocks(); return false;
 }
 function focusRoomAt(mx, my) {
   const fi = curPlanFloor(); if (fi < 0 || !ST.M) return; const fm = ST.M.floors[fi];
   const r = fm.rooms.find(q => q.name && mx >= q.x0 && mx <= q.x1 && my >= q.y0 && my <= q.y1 && q.kind !== 'hall'); if (!r) return;
   ST.ftab = fi; focusCard(r.sp ? r.sp.id : r.key.replace(/^[AB]/, ''), 0);
 }
+function focusCardQuiet(id) { ST.focusId = id; (ST.ctab = ST.ctab || {})[id] = 0; ST.open.s4 = true; renderWizard(); }
 function focusCard(id, tab) { ST.focusId = id; if (tab != null) (ST.ctab = ST.ctab || {})[id] = tab; ST.open.s4 = true; renderWizard(); const c = $('.scard.cur'); if (c) c.scrollIntoView({ block: 'start', behavior: 'smooth' }); if (isPhone() && document.body.dataset.screen === 'result' && !ST.edit) go('wiz'); }
-function splitEdge(mx, my) { const hit = blockHit(mx, my); if (!hit || hit.mode !== 'edge') return false; const b = hit.b, pts = ptsOf(b), k = hit.e, p = pts[k], q = pts[(k + 1) % pts.length], t1 = [r10(p[0] + (q[0] - p[0]) / 3), r10(p[1] + (q[1] - p[1]) / 3)], t2 = [r10(p[0] + (q[0] - p[0]) * 2 / 3), r10(p[1] + (q[1] - p[1]) * 2 / 3)]; pts.splice(k + 1, 0, [...t1], [...t1], [...t2], [...t2]); b.pts = pts; drawBlocks(); toast('변을 셋으로 나눴습니다. 가운데 네모를 끌어 들이거나 내밀어 모양을 바꾸세요.', 4000); return true; }
+function splitEdge(mx, my) { const hit = blockHit(mx, my); if (!hit || hit.mode !== 'edge' || hit.b !== ST.selB) return false; const b = hit.b, pts = ptsOf(b), k = hit.e, p = pts[k], q = pts[(k + 1) % pts.length], t1 = [r10(p[0] + (q[0] - p[0]) / 3), r10(p[1] + (q[1] - p[1]) / 3)], t2 = [r10(p[0] + (q[0] - p[0]) * 2 / 3), r10(p[1] + (q[1] - p[1]) * 2 / 3)]; pts.splice(k + 1, 0, [...t1], [...t1], [...t2], [...t2]); b.pts = pts; drawBlocks(); toast('변을 셋으로 나눴습니다. 가운데 네모를 끌어 들이거나 내밀어 모양을 바꾸세요.', 4000); return true; }
 function blockPanel(f, fi) {
   if (!Array.isArray(f.blocks)) return `<div class="pub" style="border-style:solid"><b style="font-size:13px">공간 배치</b><span class="muted" style="font-size:12px">지금은 자동 배치입니다. 직접 옮기려면 2D 도면 위 <b>배치 편집</b>을 누르세요.</span><button class="btn sm" data-edit="1">배치 편집 시작</button></div>`;
   const fm = ST.M && ST.M.floors[fi], un = new Set((fm && fm.unplaced) || []), placed = new Map(((fm && fm.blocksPlaced) || []).map(b => [b.id, b]));
@@ -3439,7 +3517,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 6.1 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 6.3 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
