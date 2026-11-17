@@ -1574,7 +1574,8 @@ function layoutBlocks(M, f, o) {
       a0 = c.b - c.a > dw + 900 ? c.a + 150 : (c.a + c.b) / 2 - dw / 2; }
     if (c.ext) { c.wall.ops = c.wall.ops.filter(q => !(a0 < q.b + 100 && q.a - 100 < a0 + dw)); op(c.wall, a0, a0 + dw, kd === 'open' ? 'door' : kd, 0, 2100, { side: c.side === 's' || c.side === 'w' ? 1 : -1, hinge: 'a' }); }
     else op(c.wall, a0, a0 + dw, kd, 0, 2100, { side: c.z[1] === k ? 1 : -1, hinge: 'a' });
-    { const o2 = c.wall.ops[c.wall.ops.length - 1]; if (o2) { if (door.hand === 'R') o2.hinge = 'b'; if (door.out) o2.side = -o2.side; } }
+    { const o2 = c.wall.ops[c.wall.ops.length - 1]; if (o2) { if (door.hand === 'R') o2.hinge = 'b'; if (door.out) o2.side = -o2.side; o2.park = door.slideTo || 'b'; } }
+    b.doorO = c.o;
     b.doorPt = c.o === 'h' ? [a0 + dw / 2, c.c] : [c.c, a0 + dw / 2];
   });
   // 현관문·창
@@ -1604,7 +1605,7 @@ function layoutBlocks(M, f, o) {
   const en = placed.find(b => b.ref === 'entry'); if (en && en.room) m.stepLines.push({ h: true, x0: en.room.x0 + 100, x1: en.room.x1 - 100, y: en.room.y1 - 200 });
   const lv = placed.find(b => b.ref === 'living');
   m.livingX0 = lv && lv.room ? lv.room.x0 : 0; m.ys0 = lv && lv.room && lv.room.y0 === 0 ? 0 : 1; m.ys1 = D;
-  m.blocksPlaced = placed.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, d: b.d, doorPt: b.doorPt || null, pts: b.ref === 'stair' ? b.pts : null, low: b.rects || null, high: b.high || null }));
+  m.blocksPlaced = placed.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.w, d: b.d, doorPt: b.doorPt || null, doorO: b.doorO || null, pts: b.ref === 'stair' ? b.pts : null, low: b.rects || null, high: b.high || null }));
   // 가구 (자동 배치 뒤, 사용자가 옮긴 자리 적용)
   for (const r of m.rooms) { if (r.part || r.kind === 'hall') continue; const n0 = m.furn.length; furnishV4(m, r, f, o, err);
     const store = furnPosStore(f, r.key) || {}, cnt = {};
@@ -2039,7 +2040,7 @@ function openingSolids(add, w, o) {
     perp(o.side, len, 0, o.z1, hingeAt, 40);
   } else if (o.kind === 'sliding') {
     const s = o.side;
-    along(o.b - 50, o.b + (o.b - o.a) - 50, 0, o.z1, s * 55, s * 95, 'door', 'doorInt');
+    if (o.park === 'a') along(o.a - (o.b - o.a) + 50, o.a + 50, 0, o.z1, s * 55, s * 95, 'door', 'doorInt'); else along(o.b - 50, o.b + (o.b - o.a) - 50, 0, o.z1, s * 55, s * 95, 'door', 'doorInt');
   }
 }
 
@@ -2404,10 +2405,11 @@ function openingPlan(g, w, o) {
     if (o.kind === 'front') R(o.a, o.b, -t / 2, t / 2, 'door');
   } else if (o.kind === 'sliding') {
     R(o.a, o.b, -t / 2, t / 2, 'door', { fill: 'gap' });
-    R(o.b - 50, o.b + L - 50, s * 55, s * 95, 'door');
+    const pa = o.park === 'a';
+    if (pa) R(o.a - L + 50, o.a + 50, s * 55, s * 95, 'door'); else R(o.b - 50, o.b + L - 50, s * 55, s * 95, 'door');
     const y = s * 200; Ln(o.a + 100, o.b - 100, y, 'door');
-    const tip = o.b - 100, P = (al, off) => H ? [al, c + off] : [c + off, al];
-    g.l('door', ...P(tip, y), ...P(tip - 120, y + 60)); g.l('door', ...P(tip, y), ...P(tip - 120, y - 60));
+    const tip = pa ? o.a + 100 : o.b - 100, k = pa ? -1 : 1, P = (al, off) => H ? [al, c + off] : [c + off, al];
+    g.l('door', ...P(tip, y), ...P(tip - k * 120, y + 60)); g.l('door', ...P(tip, y), ...P(tip - k * 120, y - 60));
   }
 }
 
@@ -3331,7 +3333,8 @@ function renderInsp() {
         <h4>열리는 방향</h4><div class="ichips"><button data-ifh="L" aria-pressed="${Fr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-ifh="R" aria-pressed="${Fr.hand === 'R'}">⟳ 오른쪽 경첩</button></div>
         <label class="tog"><input type="checkbox" data-ifm${Fr.mid ? ' checked' : ''}><span></span>중문 (3연동 슬라이딩)</label>
         <div class="tipbox">👉 도면에서 현관의 <b>바깥벽 쪽 벽을 누르면</b> 그 자리로 현관문이 옮겨집니다.${isVilla() ? ' (빌라는 계단실 쪽 벽)' : ''}</div><div class="ibtns"><button class="btn" data-ic="fauto2">↺ 현관문 위치 자동</button></div>`; }
-    else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div><h4>열리는 방향</h4><div class="ichips"><button data-idh="L" aria-pressed="${dr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-idh="R" aria-pressed="${dr.hand === 'R'}">⟳ 오른쪽 경첩</button><button data-ido="0" aria-pressed="${!dr.out}">안쪽으로 열림</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽으로 열림</button></div><label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
+    else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div>${dr.t === 'slide' ? (() => { const pl = ST.M.floors[curFi()].blocksPlaced.find(q => q.id === b.id), vert = pl && pl.doorO === 'v', to = dr.slideTo || 'b'; return `<h4>밀리는 방향</h4><div class="ichips">${vert ? `<button data-isl="a" aria-pressed="${to === 'a'}">↓ 아래쪽으로 슬라이딩</button><button data-isl="b" aria-pressed="${to === 'b'}">↑ 위쪽으로 슬라이딩</button>` : `<button data-isl="a" aria-pressed="${to === 'a'}">← 왼쪽으로 슬라이딩</button><button data-isl="b" aria-pressed="${to === 'b'}">오른쪽으로 슬라이딩 →</button>`}</div><h4>문짝이 붙는 면</h4><div class="ichips"><button data-ido="0" aria-pressed="${!dr.out}">방 안쪽 면</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽 면</button></div><p class="ihint">방향은 평면도(북쪽이 위)를 보는 기준입니다.</p>`; })()
+          : dr.t === 'swing' ? `<h4>열리는 방향</h4><div class="ichips"><button data-idh="L" aria-pressed="${dr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-idh="R" aria-pressed="${dr.hand === 'R'}">⟳ 오른쪽 경첩</button><button data-ido="0" aria-pressed="${!dr.out}">안쪽으로 열림</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽으로 열림</button></div>` : ''}<label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
         <div class="tipbox">👉 도면에서 이 공간의 <b>벽을 누르면</b> 그 자리로 문이 옮겨집니다.</div><div class="ibtns"><button class="btn" data-ic="dauto">↺ 문 위치 자동</button></div>`; }
     h = `<div class="ih" style="--c:${col}"><i>${SPACE_ICON[kind] || '⬜'}</i><b>${esc(name)}</b><span>${fmt(bbox(b).w)} × ${fmt(bbox(b).d)}</span><button class="x" data-ic="close">✕</button></div>
       ${tabs.length ? `<div class="itabs">${tabs.map(([q, v]) => `<button data-itab="${q}" aria-pressed="${ST.itab === q}">${v}</button>`).join('')}</div>` : ''}<div class="ib">${body}</div>
@@ -3359,6 +3362,7 @@ function bindInsp() {
     if (d.idh && b) { doorOf(b, f).hand = d.idh; return rebuild(true); }
     if (d.ifw) { Bq.front.w = +d.ifw; return rebuild(true); } if (d.ifh) { Bq.front.hand = d.ifh; return rebuild(true); } if (d.ic === 'fauto2') { delete f.frontPt; return rebuild(true); }
     if (d.ido && b) { doorOf(b, f).out = d.ido === '1'; return rebuild(true); }
+    if (d.isl && b) { doorOf(b, f).slideTo = d.isl; return rebuild(true); }
   };
   I.onchange = e => {
     const t = e.target, d = t.dataset, f = curF(), b = selBlock(), Bq = B();
@@ -3723,7 +3727,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.6 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.7 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
