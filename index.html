@@ -164,7 +164,7 @@ table.area tr.fl td{font-weight:600;padding-top:12px;color:var(--accent)}
 #svg .L-room polygon{stroke:none}
 #svg .f-rf-bed,#svg .f-rf-dress{fill:rgba(36,83,196,.045)}#svg .f-rf-bath,#svg .f-rf-util,#svg .f-rf-wet{fill:rgba(13,138,138,.07)}
 #svg .f-rf-living,#svg .f-rf-studio{fill:rgba(192,122,0,.045)}#svg .f-rf-kitchen{fill:rgba(192,122,0,.07)}#svg .f-rf-entry,#svg .f-rf-pantry,#svg .f-rf-storage{fill:rgba(100,110,105,.08)}
-#svg .f-rf-deck{fill:rgba(140,100,70,.12)}
+#svg .f-rf-deck{fill:rgba(140,100,70,.12)}#svg .f-rf-void{fill:var(--canvas)}
 #svg .L-furn *{stroke:var(--furn)}#svg .L-furn text{fill:var(--furn);stroke:none}
 #svg .f-ff{fill:var(--canvas)!important}#svg .f-ink{fill:var(--ink)!important;stroke:var(--ink)}
 #svg .L-win *{stroke:var(--glaz)}#svg .L-win rect,#svg .L-win polygon{fill:var(--canvas)}
@@ -1579,8 +1579,12 @@ function layoutBlocks(M, f, o) {
   let frontDone = false;
   placed.forEach((b, k) => {
     const kind = kindOf(b), segs = extSeg(k), isRoom = ['master', 'bed', 'other'].includes(kind), small = ['bath', 'util'].includes(kind);
-    if (kind === 'entry') { const pref = o.doorWest ? ['w'] : ['s', 'w', 'e', 'n'], e = pref.map(p => segs.find(q => q.side === p && q.b - q.a >= 1000)).find(Boolean);
-      if (e) { const fw = Math.min(front.w, e.b - e.a - 300); op(e.wall, e.a + 150, e.a + 150 + fw, 'front', 0, 2250, { side: e.side === 's' || e.side === 'w' ? -1 : 1, hinge: 'a', double: fw >= 1500 }); frontDone = true; }
+    if (kind === 'entry') { const pref = o.doorWest ? ['w'] : ['s', 'w', 'e', 'n'], ok = q => q.b - q.a >= 1000 && pref.includes(q.side), fp = f.frontPt;
+      let e = null, a0 = null;
+      if (fp) { const dist = q => q.o === 'h' ? Math.hypot(fp[0] - clamp(fp[0], q.a, q.b), fp[1] - q.c) : Math.hypot(fp[0] - q.c, fp[1] - clamp(fp[1], q.a, q.b)); e = segs.filter(ok).sort((p, q) => dist(p) - dist(q))[0] || null; }
+      if (!e) e = pref.map(p => segs.find(q => q.side === p && q.b - q.a >= 1000)).find(Boolean);
+      if (e) { const fw = Math.min(front.w, e.b - e.a - 300); a0 = e.a + 150; if (fp) { const along = e.o === 'h' ? fp[0] : fp[1]; a0 = clamp(Math.round((along - fw / 2) / 10) * 10, e.a + 150, e.b - 150 - fw); }
+        op(e.wall, a0, a0 + fw, 'front', 0, 2250, { side: e.side === 's' || e.side === 'w' ? -1 : 1, hinge: front.hand === 'R' ? 'b' : 'a', double: fw >= 1500 }); frontDone = true; b.doorPt = e.o === 'h' ? [a0 + fw / 2, e.c] : [e.c, a0 + fw / 2]; }
       else err(o.doorWest ? '현관이 계단실 쪽(왼쪽) 벽에 붙어 있어야 현관문을 낼 수 있습니다.' : '현관이 바깥벽에 붙어 있지 않아 현관문을 낼 수 없습니다.', [], 'warn'); return; }
     for (const e of segs) { if (o.loft || (o.doorWest && e.side === 'w')) continue; const L = e.b - e.a; if (L < 900) continue; const mid = (e.a + e.b) / 2;
       let ww = isRoom ? clamp(r100(L * 0.5), 900, 2400) : small ? 600 : kind === 'living' ? clamp(r100(L * 0.6), 1200, 3600) : kind === 'kitchen' || kind === 'dining' ? Math.min(1200, L - 600) : 0;
@@ -1921,12 +1925,12 @@ function buildSolids(m) {
       if (r.kind === 'stair' || r.kind === 'landing') continue;
       const I = inner(fm, r);
       const fmat = { bath: 'tile', ensuite: 'tile', entry: 'tileDark', util: 'tile', core: 'tileDark', parking: 'found' }[r.kind] || 'floor';
-      L('floor', fmat, boxF(I.x0, I.y0, -50, I.x1, I.y1, 0), { room: r.key });
+      for (const [a0, b0, a1, b1] of holeRects([I.x0, I.y0, I.x1, I.y1], fm.hole)) L('floor', fmat, boxF(a0, b0, -50, a1, b1, 0), { room: r.key });
     }
     if (fm.segs) { for (const g of fm.segs) { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, l = Math.hypot(dx, dy); if (l < 20) continue; const nx = -dy / l * 30, ny = dx / l * 30; L('wall', 'wallInt', prismF([[g.x1 + nx, g.y1 + ny], [g.x2 + nx, g.y2 + ny], [g.x2 - nx, g.y2 - ny], [g.x1 - nx, g.y1 - ny]], 'z', 0, H)); } }
     for (const r of (fm.rails || [])) { const hz = r.o === 'h', box = (a0, a1, t, z0, z1, mat) => L('rail', mat, hz ? boxF(a0, r.c - t, z0, a1, r.c + t, z1) : boxF(r.c - t, a0, z0, r.c + t, a1, z1));
       box(r.a, r.b, 12, 60, 1000, 'glass'); box(r.a, r.b, 30, 1000, 1060, 'frame'); const n = Math.max(1, Math.round((r.b - r.a) / 1200)); for (let k = 0; k <= n; k++) { const p = r.a + (r.b - r.a) * k / n; box(clamp(p - 25, r.a, r.b - 50), clamp(p + 25, r.a + 50, r.b), 25, 0, 1000, 'frame'); } }
-    if (!fm.piloti && !fm.imported && !fm.loftRect) L('ceiling', 'ceiling', boxF(100, 100, H, fm.W - 100, (fm.D || D) - 100, H + 20));
+    if (!fm.piloti && !fm.imported && !fm.loftRect && !m.spec.remodel) L('ceiling', 'ceiling', boxF(100, 100, H, fm.W - 100, (fm.D || D) - 100, H + 20));
     for (const w of fm.walls) {
       const mat = w.ext ? 'wallExt' : 'wallInt', ops = [...w.ops].sort((a, b) => a.a - b.a);
       const B = (a, b, za, zb) => { if (b - a < 1 || zb - za < 1) return; L('wall', mat, w.o === 'h' ? boxF(a, w.c - w.t / 2, za, b, w.c + w.t / 2, zb) : boxF(w.c - w.t / 2, a, za, w.c + w.t / 2, b, zb), { ext: w.ext }); };
@@ -2282,6 +2286,7 @@ function planPrims(M, fi = 0) {
   if (m.loftRect) { const lw = M.floors[0];
     for (const w of lw.walls) { const t = w.t / 2; if (w.o === 'h') g.r('aux', w.a, w.c - t, w.b, w.c + t, { dash: 1 }); else g.r('aux', w.c - t, w.a, w.c + t, w.b, { dash: 1 }); }
     if (lw.stair) { const n0 = g.out.length, sw0 = lw.stair, loc = { ...sw0, x0: 0, y0: 0, x1: sw0.sw, y1: sw0.len }, xf = stairXf(sw0); stairPlan(g, loc, M.FF, 0, 1); for (const p of g.out.slice(n0)) { p.L = 'aux'; p.o = { ...(p.o || {}), dash: 1 }; if (p.t === 'l') { [p.x1, p.y1] = xf(p.x1, p.y1); [p.x2, p.y2] = xf(p.x2, p.y2); } else if (p.t === 'p') p.pts = p.pts.map(q => xf(q[0], q[1])); else if (p.t === 'c') [p.cx, p.cy] = xf(p.cx, p.cy); else if (p.t === 'a') { [p.cx, p.cy] = xf(p.cx, p.cy); p.a0 += sw0.rot || 0; p.a1 += sw0.rot || 0; } else if (p.t === 't') { g.out.splice(g.out.indexOf(p), 1); } } g.tx('label', (sw0.x0 + sw0.x1) / 2, sw0.y0 - 260, '아래층 계단', 150, 'middle', { halo: 1 }); }
+    if (m.hole) { const h = m.hole; g.r('aux', h.x0, h.y0, h.x1, h.y1, { fill: 'rf-void' }); g.l('aux', h.x0, h.y0, h.x1, h.y1); g.l('aux', h.x0, h.y1, h.x1, h.y0); g.tx('label', (h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2 + 200, '계단 오름 (뚫림)', 140, 'middle', { halo: 1 }); }
     for (const r of (m.rails || [])) { if (r.o === 'h') { g.l('wall', r.a, r.c - 30, r.b, r.c - 30); g.l('wall', r.a, r.c + 30, r.b, r.c + 30); } else { g.l('wall', r.c - 30, r.a, r.c - 30, r.b); g.l('wall', r.c + 30, r.a, r.c + 30, r.b); } }
     if ((m.rails || []).length) { const r = m.rails[0]; g.tx('label', r.o === 'h' ? (r.a + r.b) / 2 : r.c + 250, r.o === 'h' ? r.c + 220 : (r.a + r.b) / 2, '난간 h1,000', 120, 'middle', { halo: 1 }); }
     if (false) g.r('aux', lw.stair.x0, lw.stair.y0, lw.stair.x1, lw.stair.y1, { dash: 1 }); for (const q of (m.landings || [])) { g.r('stair', q.x0, q.y0, q.x1, q.y1); g.l('stair', q.x0, q.y0, q.x1, q.y1); } }
@@ -2637,14 +2642,14 @@ const GL3 = {
       if (cache[mat]) return cache[mat];
       const glass = /glass/.test(mat), mm = new THREE.MeshStandardMaterial({
         color: new THREE.Color(MATCOL[mat] || '#cccccc'), roughness: 0.85, metalness: 0, side: THREE.DoubleSide,
-        transparent: glass, opacity: glass ? 0.35 : 1, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: [clip] });
+        transparent: glass, opacity: glass ? 0.35 : 1, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: [clip, ...this.fvPlanes()] });
       mm.userData = { glass, baseOp: glass ? 0.35 : 1 }; return (cache[mat] = mm);
     };
-    const lineMat = new THREE.LineBasicMaterial({ color: dark ? 0xc9d0cc : 0x1d2124, clippingPlanes: [clip] });
+    const lineMat = new THREE.LineBasicMaterial({ color: dark ? 0xc9d0cc : 0x1d2124, clippingPlanes: [clip, ...this.fvPlanes()] });
     const root = new THREE.Group(); scene.add(root);
     const groups = {};
     for (const mesh of this.meshes(solids, matFor)) {
-      let L = mesh.userData.layer; L = { found: 'floor', slab: 'floor', stair: 'floor', gutter: 'roof', door: 'window' }[L] || L;
+      let L = mesh.userData.layer; L = { found: 'floor', slab: 'floor', stair: 'floor', gutter: 'roof', door: 'window', rail: 'wall' }[L] || L;
       (groups[L] = groups[L] || new THREE.Group()).add(mesh);
       const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25), lineMat); e.userData.edge = true; e.userData.level = mesh.userData.level; e.userData.layer = mesh.userData.layer; groups[L].add(e);
     }
@@ -2653,11 +2658,29 @@ const GL3 = {
     const grid = new THREE.GridHelper(size, size, dark ? 0x4a5257 : 0xa9afab, dark ? 0x2c3236 : 0xcfd4d1);
     grid.rotation.x = Math.PI / 2; grid.position.set(model.W / 2000, model.D / 2000, -0.452); scene.add(grid);
     const ax = new THREE.AxesHelper(1.2); ax.position.set(-1.2, -1.2, -0.45); scene.add(ax);
-    this.scenes.model = { scene, groups, cache, lineMat, model };
+    this.scenes.model = { scene, groups, cache, lineMat, model, model };
     this.applyModelOpt();
   },
   floorView: 'all',
+  fvPlanes() { if (!this._fv) this._fv = [new THREE.Plane(new THREE.Vector3(0, 0, 1), 1e4), new THREE.Plane(new THREE.Vector3(0, 0, -1), 1e4)]; return this._fv; },
+  /** 층 보기: 그 층 바닥~다음 층 바닥 아래까지만 잘라 보여 줌 (위층 바깥벽도 그 높이만큼 보임) */
+  floorRange(model, fv) {
+    if (fv === 'all' || !model) return [-1e4, 1e4];
+    const F = model.floors, f = F[fv]; if (!f) return [-1e4, 1e4];
+    const z0 = (f.z0 || 0) / 1000, lo = fv === 0 ? -50 : z0 - 0.22, nx = F[fv + 1];
+    const hi = nx ? (nx.z0 / 1000) - 0.215 : z0 + ((f.Hf || model.H) / 1000) + (f.loftRect ? Math.max(0, (model.H - (f.z0 || 0) - (f.Hf || 0)) / 1000) : 0.02);
+    return [lo, f.loftRect ? Math.max(hi, model.H / 1000 + 0.01) : hi];
+  },
   applyFloorView() {
+    const fv = this.floorView, [P0, P1] = this.fvPlanes(), plan = this.mode === 'render' && this.renderOpt.preset === 'plan';
+    const M0 = (this.mode === 'render' ? this.scenes.render : this.scenes.model), model = M0 && M0.model;
+    const [lo, hi] = plan ? [-1e4, 1e4] : this.floorRange(model, fv); P0.constant = -lo; P1.constant = hi;
+    const hideRoof = fv !== 'all';
+    const M = this.scenes.model; if (M) Object.values(M.groups).forEach(g => g.children.forEach(c => { const L = c.userData.layer; c.visible = !(hideRoof && ['roof', 'gutter'].includes(L)) && (!c.userData.edge || ['edges', 'xray'].includes(this.modelOpt.display)); }));
+    const R = this.scenes.render; if (R && !plan) R.G.ext.children.forEach(c => { if (['roof', 'gutter', 'ceiling'].includes(c.userData.layer)) c.visible = !hideRoof; });
+    this.dirty = true;
+  },
+  applyFloorViewOld() {
     const fv = this.floorView, show = o => { const L = o.userData.layer, lv = o.userData.level; if (fv === 'all' || lv === undefined) return true; if (['roof', 'gutter'].includes(L)) return false; return lv === fv; };
     const M = this.scenes.model; if (M) Object.values(M.groups).forEach(g => g.children.forEach(c => { c.visible = show(c) && (!c.userData.edge || ['edges', 'xray'].includes(this.modelOpt.display)); }));
     const R = this.scenes.render; if (R && this.renderOpt.preset !== 'plan') [R.G.ext, R.G.common].forEach(g => g.children.forEach(c => { c.visible = show(c); }));
@@ -2768,6 +2791,8 @@ const GL3 = {
       vertexShader: 'varying vec3 w;void main(){w=normalize((modelMatrix*vec4(position,1.)).xyz);gl_Position=projectionMatrix*viewMatrix*modelMatrix*vec4(position,1.);}',
       fragmentShader: 'uniform vec3 top,mid,bot;varying vec3 w;void main(){float h=w.z;vec3 c=h>0.?mix(mid,top,pow(clamp(h*1.6,0.,1.),.7)):mix(mid,bot,clamp(-h*4.,0.,1.));gl_FragColor=vec4(c,1.);}' }));
     scene.add(sky);
+    { const pl = this.fvPlanes(), seen = new Set(); const mark = o => o.traverse(c => { if (c.material && !seen.has(c.material)) { seen.add(c.material); c.material.clippingPlanes = pl; c.material.needsUpdate = true; } });
+      G.common.children.forEach(c => { if (c.userData.level !== undefined) mark(c); }); G.ext.children.forEach(c => { if (c.userData.level !== undefined) mark(c); }); }
     this.scenes.render = { scene, G, M, sun, hemi, inL, skyU, sky, ground, model, pmrem: new THREE.PMREMGenerator(this.renderer) };
     this.applyPreset();
   },
@@ -3269,7 +3294,7 @@ function renderInsp() {
   } else {
     const b = selBlock(); if (!b) { I.hidden = true; return; }
     const sp = spOf(b, f), kind = kindOfB(b, f), col = BCOL[kind] || '#6b7690', room = ST.M.floors[fi] && ST.M.floors[fi].rooms.find(r => r.blockId === b.id && !r.part), name = room ? room.name.replace(/^[AB] /, '') : blockLabel(b, f);
-    const tabs = kind === 'stair' || kind === 'ev' ? [] : [['size', '📐 크기'], ['furn', '🪑 가구'], ...(doorOf(b, f) ? [['door', '🚪 문']] : [])];
+    const tabs = kind === 'stair' || kind === 'ev' ? [] : [['size', '📐 크기'], ['furn', '🪑 가구'], ...(doorOf(b, f) || b.ref === 'entry' ? [['door', '🚪 문']] : [])];
     if (!tabs.some(t => t[0] === ST.itab)) ST.itab = 'size';
     let body = '';
     if (kind === 'stair') { const Bq = B(); body = `<p class="ihint">끌어 옮기면 모든 층 계단이 같이 옮겨집니다.</p><div class="ichips">${Object.entries(STAIRS).map(([q, v]) => `<button data-ist="${q}" aria-pressed="${Bq.stair === q}">${v}</button>`).join('')}</div><label class="ilab">한 계단 폭<select data-istw>${[900, 950, 1000, 1050, 1100, 1150, 1200].map(v => `<option value="${v}"${(Bq.stairW || 1000) === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label><div class="ichips">${[['s', '↑ 아래에서'], ['n', '↓ 위에서'], ['w', '→ 왼쪽에서'], ['e', '← 오른쪽에서']].map(([q, v]) => `<button data-isst="${q}" aria-pressed="${(Bq.stairStart || 'n') === q}">${v}</button>`).join('')}</div><div class="ibtns"><button class="btn big" data-ic="srev">⇅ 같은 자리에서 오르는 방향 반대로</button>${Bq.stair !== 'I' ? `<button class="btn" data-ic="smir" aria-pressed="${!!Bq.stairMir}">↔ 도는 방향 반대로</button>` : ''}</div><p class="ihint">진한 부분은 계단 아래가 낮아 다른 공간이 못 들어가고, 점선 부분은 계단 아래 높이 2,000mm 이상이라 다른 공간을 넣을 수 있습니다.</p>`; }
@@ -3284,6 +3309,10 @@ function renderInsp() {
         ${sp && ['bath', 'dress'].includes(sp.kind) && !isFile() ? `<label class="ilab">붙이기<select data-iatt><option value="">독립 공간</option>${f.spaces.filter(s => ['master', 'bed', 'other'].includes(s.kind)).map(s => `<option value="${s.id}"${sp.attach === s.id ? ' selected' : ''}>${esc(s.name || SPACE_KINDS[s.kind])}에 귀속</option>`).join('')}</select></label>` : ''}
         <p class="ihint">도면에서 공간 안을 끌면 옮겨지고, 변의 네모를 끌면 크기가 바뀝니다. 변을 두 번 누르면 꺾인 모양을 만들 수 있습니다.</p>`;
     } else if (ST.itab === 'furn') { const fl = furnListOf(b, f); body = (fl ? furnRows(fl, sp ? sp.kind : b.ref, sp ? 'S' + sp.id : b.ref === 'living' ? 'L' : b.ref === 'kitchen' ? 'K' : b.ref === 'dining' ? 'G' : 'X') : '<p class="ihint">신발장은 이 탭이 열려 있을 때 도면에서 끌어 옮기고, 두 번 눌러 돌립니다.</p>') + fitLine(room ? room.key : '') + '<p class="ihint">이 탭이 열려 있을 때 도면에서 이 공간의 가구를 끌어 옮기고, 두 번 눌러 돌립니다.</p>'; }
+    else if (ST.itab === 'door' && b.ref === 'entry') { const Fr = B().front; body = `<h4>현관문 폭</h4><div class="ichips">${[900, 1000, 1100, 1200, 1400, 1600, 1800, 2000].map(v => `<button data-ifw="${v}" aria-pressed="${Fr.w === v}">${fmt(v)}${v >= 1500 ? ' 양개' : ''}</button>`).join('')}</div>
+        <h4>열리는 방향</h4><div class="ichips"><button data-ifh="L" aria-pressed="${Fr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-ifh="R" aria-pressed="${Fr.hand === 'R'}">⟳ 오른쪽 경첩</button></div>
+        <label class="tog"><input type="checkbox" data-ifm${Fr.mid ? ' checked' : ''}><span></span>중문 (3연동 슬라이딩)</label>
+        <div class="tipbox">👉 도면에서 현관의 <b>바깥벽 쪽 벽을 누르면</b> 그 자리로 현관문이 옮겨집니다.${isVilla() ? ' (빌라는 계단실 쪽 벽)' : ''}</div><div class="ibtns"><button class="btn" data-ic="fauto2">↺ 현관문 위치 자동</button></div>`; }
     else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div><h4>열리는 방향</h4><div class="ichips"><button data-idh="L" aria-pressed="${dr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-idh="R" aria-pressed="${dr.hand === 'R'}">⟳ 오른쪽 경첩</button><button data-ido="0" aria-pressed="${!dr.out}">안쪽으로 열림</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽으로 열림</button></div><label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
         <div class="tipbox">👉 도면에서 이 공간의 <b>벽을 누르면</b> 그 자리로 문이 옮겨집니다.</div><div class="ibtns"><button class="btn" data-ic="dauto">↺ 문 위치 자동</button></div>`; }
     h = `<div class="ih" style="--c:${col}"><i>${SPACE_ICON[kind] || '⬜'}</i><b>${esc(name)}</b><span>${fmt(bbox(b).w)} × ${fmt(bbox(b).d)}</span><button class="x" data-ic="close">✕</button></div>
@@ -3310,11 +3339,13 @@ function bindInsp() {
     if (d.ikt) { f.kitchen.type = d.ikt; return rebuild(true); } if (d.ikm) { f.kitchen.main = d.ikm; return rebuild(true); }
     if (d.idt && b) { doorOf(b, f).t = d.idt; return rebuild(true); }
     if (d.idh && b) { doorOf(b, f).hand = d.idh; return rebuild(true); }
+    if (d.ifw) { Bq.front.w = +d.ifw; return rebuild(true); } if (d.ifh) { Bq.front.hand = d.ifh; return rebuild(true); } if (d.ic === 'fauto2') { delete f.frontPt; return rebuild(true); }
     if (d.ido && b) { doorOf(b, f).out = d.ido === '1'; return rebuild(true); }
   };
   I.onchange = e => {
     const t = e.target, d = t.dataset, f = curF(), b = selBlock(), Bq = B();
     if (d.istw != null) { Bq.stairW = +t.value; return rebuild(true); }
+    if (d.ifm != null) { Bq.front.mid = t.checked; return rebuild(true); }
     if (d.idw != null && b) { doorOf(b, f).w = +t.value; return rebuild(true); }
     if (d.iname != null && b) { const sp = spOf(b, f); if (sp) sp.name = t.value.trim() || null; return rebuild(true); }
     if (d.iatt != null && b) { const sp = spOf(b, f); if (sp) sp.attach = t.value || null; return rebuild(true); }
@@ -3419,6 +3450,9 @@ function editDown(mx, my) {
   if (!f || !f.blocks) return false;
   const b = selBlock(), placed = new Map(((fm && fm.blocksPlaced) || []).map(q => [q.id, q]));
   if (ST.sel && ST.sel.type === 'furn' || (b && ST.itab === 'furn')) { for (const { q, room } of editFurn()) if (mx >= q.x0 && mx <= q.x1 && my >= q.y0 && my <= q.y1) { ST.sel = { type: 'furn', fk: q.fk, rk: q.rk }; renderInsp(); ST.drag = { mode: 'furn', fq: q, room, start: [mx, my], cur: { x0: q.x0, y0: q.y0, x1: q.x1, y1: q.y1 } }; drawBlocks(); return true; } }
+  if (b && ST.itab === 'door' && b.ref === 'entry') { const { W, D, x0 = 0, y0 = 0 } = floorDims(fi), pts = ptsOf(b); let best = null;
+    pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length], vert = p[0] === q[0], onExt = vert ? (Math.abs(p[0] - x0) < 1 || Math.abs(p[0] - x0 - W) < 1) : (Math.abs(p[1] - y0) < 1 || Math.abs(p[1] - y0 - D) < 1); const t = vert ? [p[0], clamp(my, Math.min(p[1], q[1]), Math.max(p[1], q[1]))] : [clamp(lx, Math.min(p[0], q[0]), Math.max(p[0], q[0])), p[1]], dd = Math.hypot(lx - t[0], my - t[1]); if (!best || dd < best.d) best = { d: dd, t, onExt }; });
+    if (best && best.d < Math.max(400, 30 * s)) { if (!best.onExt) { toast('현관문은 바깥벽 쪽 벽에만 낼 수 있습니다.'); return true; } f.frontPt = [r10(best.t[0]), r10(best.t[1])]; rebuild(true); toast('현관문을 옮겼습니다.'); return true; } }
   if (b && ST.itab === 'door' && doorOf(b, f)) { const pts = ptsOf(b); let best = null; pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length], vert = p[0] === q[0], t = vert ? [p[0], clamp(my, Math.min(p[1], q[1]), Math.max(p[1], q[1]))] : [clamp(lx, Math.min(p[0], q[0]), Math.max(p[0], q[0])), p[1]], dd = Math.hypot(lx - t[0], my - t[1]); if (!best || dd < best.d) best = { d: dd, t }; });
     if (best && best.d < Math.max(400, 30 * s)) { const dr = doorOf(b, f); dr.pt = [r10(best.t[0]), r10(best.t[1])]; delete dr.at; rebuild(true); toast('문을 옮겼습니다.'); return true; } }
   if (b && ST.itab === 'size') {
@@ -3671,7 +3705,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.2 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.5 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
