@@ -485,6 +485,13 @@ body.optopen .right{transform:none}
  .status{display:none}
 }
 @media (min-width:701px) and (max-width:1100px){.palette{width:112px}}
+.themepop{position:absolute;right:12px;top:70px;z-index:8;width:min(400px,calc(100% - 24px));background:#fff;border-radius:22px;box-shadow:var(--sh);padding:16px;display:grid;gap:12px}
+.tp-h{display:flex;align-items:center;justify-content:space-between}.tp-h b{font-size:18px}.tp-h .x{border:0;background:var(--panel2);width:36px;height:36px;border-radius:12px}
+.tp-sw{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.tp-sw button,.tp-custom{display:grid;gap:4px;justify-items:center;border:2px solid transparent;border-radius:14px;background:#f5f8ff;padding:8px 4px;font-size:12px;font-weight:600;cursor:pointer}
+.tp-sw i{width:36px;height:36px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(0,0,0,.06)}.tp-sw button[aria-pressed="true"]{border-color:var(--accent)}
+.tp-custom input{width:38px;height:38px;border:0;padding:0;background:none}
+.tp-prev{display:flex;height:34px;border-radius:12px;overflow:hidden}.tp-prev i{flex:1}
+@media (max-width:700px){.themepop{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:22px 22px 0 0}}
 @media print{
  body *{visibility:hidden}#svg,#svg *{visibility:visible}
  #svg{position:fixed;inset:0;width:100%;height:100%}
@@ -535,6 +542,7 @@ body.optopen .right{transform:none}
    <div class="seg" role="group" aria-label="보기"><button data-view="2d" aria-pressed="true">2D 평면</button><button data-view="model" aria-pressed="false">3D</button><button data-view="render" aria-pressed="false">렌더링</button></div>
    <div class="fchips" id="floorChips"></div>
    <div class="sp"></div>
+   <button class="tbtn" id="bTheme">🎨 색</button>
    <button class="tbtn" id="bCheck">✓</button>
    <button class="tbtn" id="bMeasure" aria-pressed="false">📏 거리</button>
    <button class="tbtn" id="bFit">⤢ 맞춤</button>
@@ -546,6 +554,7 @@ body.optopen .right{transform:none}
   <div class="view" id="v3d" hidden><div class="loading" id="load3d" hidden>3D 화면을 준비하고 있습니다</div></div>
   <div class="palette" id="palette"></div>
   <div class="insp" id="insp" hidden></div>
+  <div class="themepop" id="themePop" hidden></div>
   <div class="status num"><span class="xy" id="xy"></span><span id="stInfo"></span><span class="wn" id="stWarn"></span></div>
  </main>
  <aside class="right" id="opts" aria-label="도면·내보내기">
@@ -1225,6 +1234,7 @@ function layoutFloorV4(M, f, o) {
 function furnList(list) { return (list || []).filter(x => x.n > 0).map(x => ({ id: x.id, n: x.n, w: x.w, d: x.d })); }
 function furnishV4(m, r, f, o, err) {
   const I = inner(m, r);
+  if (r.kind === 'entry' && m.blockMode) { const w = Math.min(1200, I.x1 - I.x0 - 100); if (w >= 400) F(m, 'shoe', I.x0, I.y1 - 350, I.x0 + w, I.y1, 1000, { side: 'n', label: '신발장' }); return; }
   const report = (res, label) => { for (const x of res.fails) err(`${r.name}: ${x.label} — ${x.reason}`, [{ label: `${x.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'fdel', id: r.sp ? r.sp.id : 'living', fid: x.id } }, SMALLER_BED[x.id] && r.sp ? { label: `${catById(SMALLER_BED[x.id]).name}로 바꾸기`, act: { t: 'fswap', id: r.sp.id, fid: x.id, to: SMALLER_BED[x.id] } } : null, r.sp ? { label: `${r.name} 가로 +600`, act: { t: 'sset', id: r.sp.id, key: 'w', v: r.sp.w + 600 } } : null], 'furn');
     for (const x of res.flow.filter(q => !q.ok)) err(`${r.name}: ${x.label} 앞까지 갈 통로(폭 500mm)가 없습니다.`, [{ label: `${x.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'fdel', id: r.sp ? r.sp.id : 'living', fid: x.id } }], 'furn'); };
   if (['master', 'bed', 'other', 'dress', 'util', 'pantry', 'storage'].includes(r.kind)) {
@@ -1527,6 +1537,7 @@ function layoutBlocks(M, f, o) {
       a0 = c.b - c.a > dw + 900 ? c.a + 150 : (c.a + c.b) / 2 - dw / 2; }
     if (c.ext) { c.wall.ops = c.wall.ops.filter(q => !(a0 < q.b + 100 && q.a - 100 < a0 + dw)); op(c.wall, a0, a0 + dw, kd === 'open' ? 'door' : kd, 0, 2100, { side: c.side === 's' || c.side === 'w' ? 1 : -1, hinge: 'a' }); }
     else op(c.wall, a0, a0 + dw, kd, 0, 2100, { side: c.z[1] === k ? 1 : -1, hinge: 'a' });
+    { const o2 = c.wall.ops[c.wall.ops.length - 1]; if (o2) { if (door.hand === 'R') o2.hinge = 'b'; if (door.out) o2.side = -o2.side; } }
     b.doorPt = c.o === 'h' ? [a0 + dw / 2, c.c] : [c.c, a0 + dw / 2];
   });
   // 현관문·창
@@ -1884,9 +1895,9 @@ function buildSolids(m) {
     for (const w of fm.walls) {
       const mat = w.ext ? 'wallExt' : 'wallInt', ops = [...w.ops].sort((a, b) => a.a - b.a);
       const B = (a, b, za, zb) => { if (b - a < 1 || zb - za < 1) return; L('wall', mat, w.o === 'h' ? boxF(a, w.c - w.t / 2, za, b, w.c + w.t / 2, zb) : boxF(w.c - w.t / 2, a, za, w.c + w.t / 2, b, zb), { ext: w.ext }); };
-      let cur = w.a;
-      for (const o of ops) { B(cur, o.a, 0, H); if (o.kind !== 'open' || o.z0 > 0) B(o.a, o.b, 0, o.z0); B(o.a, o.b, o.z1, H); cur = o.b; openingSolids(L, w, o); }
-      B(cur, w.b, 0, H);
+      let cur = w.a; const Hw = !w.ext && m.floors[li + 1] && m.floors[li + 1].loftRect ? Math.min(H, FF - 200) : H;
+      for (const o of ops) { B(cur, o.a, 0, Hw); if (o.kind !== 'open' || o.z0 > 0) B(o.a, o.b, 0, o.z0); B(o.a, o.b, o.z1, Hw); cur = o.b; openingSolids(L, w, o); }
+      B(cur, w.b, 0, Hw);
     }
     for (const f of fm.furn) furnSolids(f, L, FF);
     if (fm.stair && li < N - 1) stairSolids(fm.stair, FF, L);
@@ -2531,7 +2542,7 @@ const GL3 = {
     if (this.renderer) { if (this.renderer.domElement.parentNode !== host) host.appendChild(this.renderer.domElement); this.host = host; return; }
     this.host = host;
     const r = this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    r.setPixelRatio(Math.min(devicePixelRatio, this.mobile() ? 1.5 : 2));
+    r.setPixelRatio(Math.min(devicePixelRatio * 1.25, this.mobile() ? 2 : 2.5));
     r.outputEncoding = THREE.sRGBEncoding; r.localClippingEnabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     host.appendChild(r.domElement);
@@ -2600,7 +2611,7 @@ const GL3 = {
     for (const mesh of this.meshes(solids, matFor)) {
       let L = mesh.userData.layer; L = { found: 'floor', slab: 'floor', stair: 'floor', gutter: 'roof', door: 'window' }[L] || L;
       (groups[L] = groups[L] || new THREE.Group()).add(mesh);
-      const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25), lineMat); e.userData.edge = true; groups[L].add(e);
+      const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25), lineMat); e.userData.edge = true; e.userData.level = mesh.userData.level; e.userData.layer = mesh.userData.layer; groups[L].add(e);
     }
     for (const [k, g] of Object.entries(groups)) { g.name = k; root.add(g); }
     const size = Math.ceil(Math.max(model.W, model.D) / 1000) + 12;
@@ -2609,6 +2620,13 @@ const GL3 = {
     const ax = new THREE.AxesHelper(1.2); ax.position.set(-1.2, -1.2, -0.45); scene.add(ax);
     this.scenes.model = { scene, groups, cache, lineMat, model };
     this.applyModelOpt();
+  },
+  floorView: 'all',
+  applyFloorView() {
+    const fv = this.floorView, show = o => { const L = o.userData.layer, lv = o.userData.level; if (fv === 'all' || lv === undefined) return true; if (['roof', 'gutter'].includes(L)) return false; return lv === fv; };
+    const M = this.scenes.model; if (M) Object.values(M.groups).forEach(g => g.children.forEach(c => { c.visible = show(c) && (!c.userData.edge || ['edges', 'xray'].includes(this.modelOpt.display)); }));
+    const R = this.scenes.render; if (R && this.renderOpt.preset !== 'plan') [R.G.ext, R.G.common].forEach(g => g.children.forEach(c => { c.visible = show(c); }));
+    this.dirty = true;
   },
   applyModelOpt() {
     const S = this.scenes.model; if (!S) return;
@@ -2622,7 +2640,7 @@ const GL3 = {
     }
     for (const g of Object.values(S.groups)) g.children.forEach(c => { if (c.userData.edge) c.visible = o.display === 'edges' || o.display === 'xray'; });
     this.modelClip.constant = o.cut == null ? 1000 : o.cut / 1000;
-    this.dirty = true;
+    this.applyFloorView();
   },
 
   /* ---------------- 렌더링 (사실적 화면) ---------------- */
@@ -2669,7 +2687,9 @@ const GL3 = {
     const scene = new THREE.Scene();
     const G = { ext: new THREE.Group(), plan: new THREE.Group(), common: new THREE.Group() }; Object.values(G).forEach(g => scene.add(g));
     const extOnly = s => ['roof', 'ceiling', 'gutter'].includes(s.layer) || (s.layer === 'wall' && s.gable) || s.mat === 'vent' || ['wall', 'window', 'door'].includes(s.layer);
-    for (const me of this.meshes(solids, matFor, uvS)) {
+    const pal = themePalette(model.P && model.P.theme); M.wallInt.color = new THREE.Color(pal.wall);
+    for (const g of fancyFurniture(model, pal)) G.common.add(g);
+    for (const me of this.meshes(solids, matFor, uvS, s => s.layer !== 'furn' || s.mat === 'wallExt')) {
       const { layer, mat } = me.userData; me.castShadow = !/glass/.test(mat); me.receiveShadow = true;
       (['roof', 'ceiling', 'gutter', 'wall', 'window', 'door', 'slab'].includes(layer) ? G.ext : G.common).add(me);
     }
@@ -2703,7 +2723,7 @@ const GL3 = {
     if (kind !== 'studio') for (let y = .5; y < D - .3; y += .75) if (kind === 'country') bush(model.floors[0].W / 1000 + .75, y, .34 + rnd() * .08);
     // 조명
     const hemi = new THREE.HemisphereLight(0xdfeaf5, 0x5d6b4a, .6); scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.castShadow = true; const ms = this.mobile() ? 1024 : 2048; sun.shadow.mapSize.set(ms, ms);
+    const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.castShadow = true; const ms = this.mobile() ? 2048 : 4096; sun.shadow.mapSize.set(ms, ms); sun.shadow.radius = 3;
     const ext = Math.max(W, D, roofInfo(model).zTop / 1000) + 8; Object.assign(sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 140 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
     sun.target.position.set(W / 2, D / 2, 0); scene.add(sun, sun.target); sun.shadow.camera.far = 200;
     const inL = model.rooms.filter(r => !['stair', 'parking'].includes(r.kind)).slice(0, 40).map(r => { const l = new THREE.PointLight(0xffc27a, 0, 5, 2); l.position.set((r.x0 + r.x1) / 2000, (r.y0 + r.y1) / 2000, ((r.level || 0) * model.FF + model.H) / 1000 - .4); scene.add(l); return l; });
@@ -2737,7 +2757,7 @@ const GL3 = {
     if (R.ground.material.map) R.ground.material.color.set(k === 'plan' ? 0xe4ecd8 : 0xffffff);
     R.scene.fog = new THREE.Fog(p.fog, k === 'plan' ? 120 : 70, k === 'plan' ? 400 : 320);
     const es = new THREE.Scene(); es.add(R.sky.clone()); R.scene.environment = R.pmrem.fromScene(es, 0.02).texture;
-    this.exposure = p.exp; this.dirty = true;
+    this.exposure = p.exp; this.applyFloorView(); this.dirty = true;
   },
   buildPlanCut(level) {
     const R = this.scenes.render, C = this._cut; if (!R || !C) return;
@@ -2792,6 +2812,90 @@ const GL3 = {
     return url;
   }
 };
+
+/* ===================== 06b. 렌더링용 고급 가구 + 색 테마 ===================== */
+/* 3D 보기는 각진 상자, 렌더링은 둥근 모서리·쿠션·다리·손잡이까지 살린 모양 */
+const THEMES = [['#e9a6b3', '로즈 핑크'], ['#f2c48d', '살구'], ['#e8d9a8', '버터'], ['#a8d5ba', '민트'], ['#9cc3e6', '하늘'], ['#b8a9e3', '라벤더'], ['#8fa89a', '세이지'], ['#c9b29b', '오트밀'], ['#5f7f9e', '딥 블루'], ['#7c5c4a', '월넛'], ['#4a4f57', '차콜'], ['#2f5d50', '포레스트']];
+function hexHsl(hex) { const n = parseInt(hex.slice(1), 16); let r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2; if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; } return [h * 360, s, l]; }
+const hsl = (h, s, l) => `hsl(${((h % 360) + 360) % 360},${clamp(s, 0, 1) * 100}%,${clamp(l, 0, 1) * 100}%)`;
+/** 고른 색 하나로 집 전체 색 묶음을 만든다. mono=같은 계열, harmony=어울리는 보색 포인트 */
+function themePalette(theme) {
+  if (!theme || !theme.c) return { wall: '#f6f4ef', fab1: '#cfc6b8', fab2: '#9aae94', fab3: '#e9e3d8', accent: '#7f8c8d', rug: '#ddd3c2', wood: '#b88a5e', woodDark: '#6b4a33', linen: '#fbfaf6', cab: '#efebe4', metal: '#b9975b' };
+  const [h, s, l] = hexHsl(theme.c), mono = theme.mode !== 'harmony', s2 = Math.min(s, .55);
+  return {
+    wall: hsl(h, s2 * .35, .955), fab1: theme.c, fab2: mono ? hsl(h + 18, s2 * .8, clamp(l + .12, .35, .82)) : hsl(h + 180, s2 * .7, clamp(l, .4, .7)),
+    fab3: hsl(h - 15, s2 * .45, .88), accent: hsl(h + (mono ? -8 : 150), Math.min(.65, s2 + .1), clamp(l - .22, .2, .5)), rug: hsl(h + 8, s2 * .4, .82),
+    wood: hsl(30, .38, .52), woodDark: hsl(25, .35, .28), linen: hsl(h, s2 * .2, .97), cab: hsl(h, s2 * .25, .93), metal: '#b9975b'
+  };
+}
+const GLF = {
+  rrect(w, d, r) { const s = new THREE.Shape(), x = -w / 2, y = -d / 2; r = Math.min(r, w / 2 - .001, d / 2 - .001); s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + d - r); s.quadraticCurveTo(x + w, y + d, x + w - r, y + d); s.lineTo(x + r, y + d); s.quadraticCurveTo(x, y + d, x, y + d - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; },
+  rbox(w, d, h, r, mat, bev) { r = Math.max(.002, Math.min(r, w / 2.2, d / 2.2)); const b = Math.min(bev ?? r * .8, h / 2.2); const g = new THREE.ExtrudeGeometry(GLF.rrect(w - 2 * b, d - 2 * b, Math.max(.001, r - b)), { depth: Math.max(.001, h - 2 * b), bevelEnabled: b > .001, bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 6 }); g.translate(0, 0, b); const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; return m; },
+  box(w, d, h, mat) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), mat); m.geometry.translate(0, 0, h / 2); m.castShadow = m.receiveShadow = true; return m; },
+  cyl(r1, r2, h, mat, seg = 20) { const g = new THREE.CylinderGeometry(r2, r1, h, seg); g.rotateX(Math.PI / 2); g.translate(0, 0, h / 2); const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; return m; },
+  at(o, x, y, z) { o.position.set(x, y, z); return o; }
+};
+function fancyMats(pal) {
+  const S = o => new THREE.MeshStandardMaterial(o), P = o => new THREE.MeshPhysicalMaterial(o), C = c => new THREE.Color(c);
+  return {
+    fab1: S({ color: C(pal.fab1), roughness: .95 }), fab2: S({ color: C(pal.fab2), roughness: .95 }), fab3: S({ color: C(pal.fab3), roughness: .97 }), accent: S({ color: C(pal.accent), roughness: .9 }),
+    linen: S({ color: C(pal.linen), roughness: .98 }), rug: S({ color: C(pal.rug), roughness: 1 }), wood: S({ color: C(pal.wood), roughness: .6 }), woodDark: S({ color: C(pal.woodDark), roughness: .55 }),
+    cab: S({ color: C(pal.cab), roughness: .5 }), metal: S({ color: C(pal.metal), roughness: .3, metalness: .85 }), steel: S({ color: 0xc9ccce, roughness: .25, metalness: .9 }), black: S({ color: 0x111316, roughness: .25, metalness: .2 }),
+    stone: P({ color: 0xe9e6e1, roughness: .18, clearcoat: .6 }), porcelain: P({ color: 0xfbfbfb, roughness: .12, clearcoat: 1 }), glass: P({ color: 0xdfeef3, roughness: .02, transparent: true, opacity: .25, depthWrite: false }),
+    screen: P({ color: 0x0b0d10, roughness: .08, clearcoat: 1 }), leaf: S({ color: 0x4f7d42, roughness: .8, flatShading: true }), leaf2: S({ color: 0x6b9a4f, roughness: .8, flatShading: true }), pot: S({ color: 0xd8cfc0, roughness: .7 }),
+    lamp: S({ color: 0xfff1d6, emissive: 0xffd9a0, emissiveIntensity: .6, roughness: .9 })
+  };
+}
+/** 가구 하나 → three.js 묶음 (미터 단위, 바닥 z=0, 뒤쪽이 local +y) */
+function fancyItem(f, X) {
+  const g = new THREE.Group(), { rbox, box, cyl, at } = GLF, opp = { n: 's', s: 'n', e: 'w', w: 'e' };
+  const back = f.kind === 'bed' ? (f.head || 'n') : f.kind === 'sofa' ? (f.back || 'n') : ['chair', 'dchair', 'counter', 'toilet', 'vanity', 'desk'].includes(f.kind) ? opp[f.face || 's'] || 'n' : (f.side || 'n');
+  const rot = { n: 0, w: Math.PI / 2, s: Math.PI, e: -Math.PI / 2 }[back] || 0, swap = back === 'e' || back === 'w';
+  const W = (swap ? f.y1 - f.y0 : f.x1 - f.x0) / 1000, D = (swap ? f.x1 - f.x0 : f.y1 - f.y0) / 1000, H = (f.h || 800) / 1000;
+  const add = (o, x, y, z) => { g.add(at(o, x, y, z)); return o; };
+  switch (f.kind) {
+    case 'bed': { add(rbox(W, D, .26, .04, X.woodDark), 0, 0, .04); add(rbox(W - .06, D - .08, .22, .06, X.linen), 0, -.02, .28);
+      add(rbox(W - .02, D * .72, .07, .05, X.fab1), 0, -D * .14, .47); add(rbox(W - .04, .35, .075, .04, X.accent), 0, -D / 2 + .3, .5);
+      const n = f.n || 1, bw = W / n; for (let i = 0; i < n; i++) { const cx = -W / 2 + bw * (i + .5); add(rbox(Math.min(.62, bw * .42), .38, .14, .07, X.linen), cx - bw * .2, D / 2 - .32, .5); add(rbox(Math.min(.5, bw * .36), .3, .12, .06, X.fab3), cx + bw * .18, D / 2 - .36, .52); }
+      add(rbox(W + .06, .1, .95, .05, X.fab2), 0, D / 2 - .03, .1); [[-1, -1], [1, -1]].forEach(([a]) => add(cyl(.02, .02, .05, X.metal), a * (W / 2 - .08), -D / 2 + .08, 0)); break; }
+    case 'sofa': { const legH = .1; [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => add(cyl(.018, .014, legH, X.metal, 10), a * (W / 2 - .07), b * (D / 2 - .07), 0));
+      add(rbox(W, D, .2, .05, X.fab1), 0, 0, legH); const armW = .16; add(rbox(armW, D, .38, .07, X.fab1), -W / 2 + armW / 2, 0, legH + .12); add(rbox(armW, D, .38, .07, X.fab1), W / 2 - armW / 2, 0, legH + .12);
+      add(rbox(W - 2 * armW, .22, .5, .08, X.fab1), 0, D / 2 - .13, legH + .12); const n = Math.max(1, Math.round((W - 2 * armW) / .72)), cw = (W - 2 * armW) / n;
+      for (let i = 0; i < n; i++) { const cx = -W / 2 + armW + cw * (i + .5); add(rbox(cw - .02, D - .28, .14, .07, X.fab1), cx, -.1, legH + .2); add(rbox(cw - .04, .16, .42, .09, X.fab1), cx, D / 2 - .3, legH + .3); }
+      add(rbox(.42, .14, .4, .1, X.accent), -W / 2 + armW + .3, D / 2 - .42, legH + .36).rotation.z = .25; add(rbox(.4, .13, .38, .1, X.fab2), W / 2 - armW - .3, D / 2 - .42, legH + .36).rotation.z = -.2; break; }
+    case 'tvunit': { add(rbox(W, D, H * .82, .02, X.wood), 0, 0, H * .18); [-1, 1].forEach(a => add(cyl(.015, .015, H * .18, X.metal, 8), a * (W / 2 - .1), 0, 0)); const n = Math.max(2, Math.round(W / .6)); for (let i = 1; i < n; i++) add(box(.006, .005, H * .7, X.woodDark), -W / 2 + W * i / n, -D / 2 - .001, H * .23); break; }
+    case 'tv': { const wv = Math.max(W, D) * .98; add(rbox(wv, .035, wv * .56, .01, X.screen), 0, 0, .62); add(box(.2, .12, .02, X.black), 0, 0, .58); break; }
+    case 'ctable': { add(rbox(W, D, .045, Math.min(W, D) * .45, X.wood), 0, 0, .34); add(rbox(W * .7, D * .55, .02, .05, X.woodDark), 0, 0, .14); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => add(cyl(.016, .016, .34, X.metal, 8), a * W * .38, b * D * .34, 0)); add(cyl(.05, .04, .1, X.accent, 14), W * .2, 0, .385); break; }
+    case 'rug': { add(rbox(W, D, .008, .06, X.accent), 0, 0, 0); add(rbox(W - .12, D - .12, .012, .05, X.rug), 0, 0, 0); break; }
+    case 'table': { add(rbox(W, D, .04, .03, X.wood), 0, 0, .71); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => add(cyl(.025, .02, .71, X.woodDark, 10), a * (W / 2 - .08), b * (D / 2 - .08), 0)); add(cyl(.06, .05, .2, X.glass, 14), 0, 0, .75); add(rbox(Math.max(W, D) * .55, .3, .005, .02, X.fab3), 0, 0, .75); break; }
+    case 'dchair': { [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => add(cyl(.014, .012, .44, X.woodDark, 8), a * (W / 2 - .05), b * (D / 2 - .05), 0)); add(rbox(W, D, .06, .05, X.fab2), 0, 0, .43); add(rbox(W * .92, .05, .4, .06, X.fab2), 0, D / 2 - .03, .48); break; }
+    case 'chair': { add(rbox(W * .9, D * .85, .08, .06, X.fab2), 0, -.02, .44); add(rbox(W * .85, .06, .45, .08, X.fab2), 0, D / 2 - .05, .55); add(cyl(.025, .025, .38, X.steel, 10), 0, 0, .06); for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5, l = box(.04, .26, .03, X.black); l.rotation.z = a; add(l, Math.sin(a) * .13, -Math.cos(a) * .13, .03); } break; }
+    case 'desk': { add(rbox(W, D, .03, .015, X.wood), 0, 0, .71); [-1, 1].forEach(a => add(box(.04, D - .06, .71, X.metal), a * (W / 2 - .04), 0, 0)); if (!f.vanity) { add(rbox(.56, .02, .34, .01, X.screen), 0, D / 2 - .18, .86); add(box(.06, .06, .12, X.black), 0, D / 2 - .16, .74); add(cyl(.07, .02, .02, X.black), .4 * W / 2, D / 2 - .15, .74); } else add(rbox(.6, .02, .7, .3, X.porcelain), 0, D / 2 - .02, .8); break; }
+    case 'wardrobe': case 'shoe': { add(rbox(W, D, H - .06, .01, X.cab), 0, 0, .06); add(box(W - .04, D - .04, .06, X.woodDark), 0, 0, 0); const n = Math.max(1, Math.round(W / .45)); for (let i = 0; i < n; i++) { const x = -W / 2 + W * (i + .5) / n; add(box(.004, .006, H - .1, X.woodDark), -W / 2 + W * i / n, -D / 2 - .002, .08); add(cyl(.006, .006, Math.min(.3, H * .25), X.metal, 8), x + (i % 2 ? -1 : 1) * (W / n / 2 - .05), -D / 2 - .01, H * .45); } break; }
+    case 'night': { add(rbox(W, D, H * .9, .02, X.wood), 0, 0, H * .1); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => add(cyl(.01, .01, H * .1, X.metal, 6), a * (W / 2 - .04), b * (D / 2 - .04), 0)); add(box(W - .04, .005, .004, X.woodDark), 0, -D / 2, H * .55); add(cyl(.06, .05, .03, X.metal), 0, 0, H); add(cyl(.008, .008, .25, X.metal, 6), 0, 0, H + .03); add(cyl(.14, .09, .18, X.lamp, 18), 0, 0, H + .25); break; }
+    case 'counter': { add(box(W - .06, D - .06, .1, X.black), 0, -.03, 0); add(rbox(W, D, .77, .01, X.cab), 0, 0, .1); add(rbox(W + .02, D + .02, .03, .01, X.stone), 0, -.01, .87); const n = Math.max(1, Math.round(W / .6)); for (let i = 0; i < n; i++) { add(box(.004, .005, .7, X.woodDark), -W / 2 + W * i / n, -D / 2 - .002, .13); add(box(.18, .015, .015, X.metal), -W / 2 + W * (i + .5) / n, -D / 2 - .01, .8); } if (!f.island) { add(rbox(W, .34, .7, .01, X.cab), 0, D / 2 - .17, 1.45); add(box(W, .01, .55, X.stone), 0, D / 2 - .005, .9); } break; }
+    case 'sink': { add(rbox(W, D, .02, .04, X.steel), 0, 0, .885); add(cyl(.015, .015, .28, X.steel, 10), 0, D / 2 - .05, .9); const sp = box(.03, .2, .03, X.steel); add(sp, 0, D / 2 - .14, 1.15); break; }
+    case 'cook': { add(rbox(W, D, .012, .02, X.black), 0, 0, .9); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => { const t = new THREE.Mesh(new THREE.TorusGeometry(.07, .006, 6, 24), X.steel); add(t, a * W * .25, b * D * .22, .915); }); break; }
+    case 'fridge': { add(rbox(W, D, H, .04, X.steel), 0, 0, 0); add(box(W - .02, .004, .004, X.black), 0, -D / 2 - .001, H * .62); [-.04, .04].forEach(a => add(box(.018, .03, H * .45, X.metal), a, -D / 2 - .02, H * .3)); break; }
+    case 'toilet': { add(rbox(W * .9, .2, .4, .06, X.porcelain), 0, D / 2 - .12, .38); const bowl = new THREE.Mesh(new THREE.LatheGeometry([0, .12, .18, .19, .18].map((r, i) => new THREE.Vector2(r || .001, i * .1)), 24), X.porcelain); bowl.rotation.x = Math.PI / 2; bowl.scale.set(1, 1, 1.3); add(bowl, 0, -D * .08, 0); add(rbox(.38, .46, .03, .18, X.porcelain), 0, -D * .08, .41); break; }
+    case 'vanity': { add(rbox(W, D, .62, .02, X.wood), 0, 0, .18); add(rbox(W, D, .05, .03, X.stone), 0, 0, .8); const b = new THREE.Mesh(new THREE.SphereGeometry(.19, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), X.porcelain); b.scale.set(1, .8, .5); b.rotation.x = Math.PI; add(b, 0, -.02, .9); add(cyl(.012, .012, .18, X.metal, 8), 0, D / 2 - .06, .85); add(rbox(Math.min(.8, W), .025, .7, .04, X.screen), 0, D / 2 + .01, 1.15); break; }
+    case 'shower': { add(rbox(W, D, .04, .02, X.stone), 0, 0, 0); add(box(.012, D * .9, 1.95, X.glass), -W / 2 + .3, 0, .04); add(cyl(.01, .01, 1.9, X.metal, 8), W / 2 - .15, D / 2 - .08, .04); add(cyl(.11, .11, .02, X.metal, 18), W / 2 - .3, D / 2 - .25, 2.0); break; }
+    case 'tub': { add(rbox(W, D, H, .12, X.porcelain), 0, 0, 0); add(rbox(W - .14, D - .14, .05, .14, new THREE.MeshPhysicalMaterial({ color: 0xcfe6ef, roughness: .05, transparent: true, opacity: .7 })), 0, 0, H - .14); break; }
+    case 'plant': { add(cyl(.17, .13, .38, X.pot, 18), 0, 0, 0); for (let i = 0; i < 9; i++) { const a = i * 2.4, r = .08 + (i % 3) * .07; const l = new THREE.Mesh(new THREE.IcosahedronGeometry(.13 + (i % 2) * .05, 0), i % 2 ? X.leaf : X.leaf2); l.castShadow = true; add(l, Math.cos(a) * r, Math.sin(a) * r, .55 + (i % 4) * .14); } add(cyl(.012, .012, .3, X.woodDark, 6), 0, 0, .35); break; }
+    case 'hanger': { add(box(W, D, .03, X.woodDark), 0, 0, 0); add(cyl(.012, .012, W, X.metal, 8).rotateY(Math.PI / 2), 0, 0, 1.72); const n = Math.max(3, Math.round(W / .09)); for (let i = 0; i < n; i++) { const c = [X.fab1, X.fab2, X.fab3, X.accent, X.linen][i % 5]; add(box(.035, D * .8, .7 + (i % 3) * .15, c), -W / 2 + W * (i + .5) / n, 0, 1.68 - (.7 + (i % 3) * .15)); } break; }
+    case 'washer': { add(rbox(W, D, H, .03, X.cab), 0, 0, 0); const d0 = new THREE.Mesh(new THREE.TorusGeometry(.18, .025, 10, 30), X.steel); d0.rotation.x = Math.PI / 2; add(d0, 0, -D / 2 - .01, H * .45); add(cyl(.16, .16, .01, X.glass).rotateX(Math.PI / 2), 0, -D / 2, H * .45); break; }
+    case 'usink': { add(rbox(W, D, H, .02, X.cab), 0, 0, 0); add(rbox(W - .1, D - .1, .02, .05, X.steel), 0, 0, H); break; }
+    case 'box': { const soft = /소파|빈백|방석|매트/.test(f.label || ''); add(rbox(W, D, H, soft ? .12 : .02, soft ? X.fab2 : X.wood), 0, 0, 0); break; }
+    default: return null;
+  }
+  g.rotation.z = rot; g.position.set((f.x0 + f.x1) / 2000, (f.y0 + f.y1) / 2000, 0);
+  return g;
+}
+function fancyFurniture(model, pal) {
+  const X = fancyMats(pal), out = [];
+  model.floors.forEach(fm => { for (const f of fm.furn) { if (f.kind === 'column' || f.kind === 'stall') continue; const g = fancyItem(f, X); if (!g) continue; g.position.z = (fm.z0 || 0) / 1000; g.userData.level = fm.level; out.push(g); } });
+  return out;
+}
 
 /* ===================== 07. 로그인 ===================== */
 const CRED = /*CRED*/{ id: 'wonman', salt: 'c794670e62cb1607e4db0f6799300240', iter: 120000, hash: '57f1dce519a12d44a41b0d459fe9ade8ea8a5265f60cf86f4c82f047166e05cc' }/*CRED*/;
@@ -2852,6 +2956,7 @@ function startApp() {
   $('#bOpt').onclick = () => document.body.classList.toggle('optopen'); $('#optClose').onclick = () => document.body.classList.remove('optopen');
   $('#bHome').onclick = () => showStart(); $('#bSave').onclick = saveProject; $('#bMore').onclick = openMore; $('#bNew').onclick = newStart; $('#bSetup').onclick = () => openFlow();
   $('#bCheck').onclick = () => { if (ST.M) openCheck(); };
+  $('#bTheme').onclick = openTheme;
   init2D(); buildPalette();
   const last = JSON.parse(localStorage.getItem('wonman7.last') || 'null');
   if (last && last.P && last.P.v7) { ST.P = last.P; ST.name = last.name || ST.name; ST.pid = last.pid || null; $('#projName').textContent = ST.name; enterEditor(); }
@@ -3023,9 +3128,9 @@ function rebuild(now) {
     if (!ST.P || !ready()) return;
     const P = ST.P, fls = isFile() ? [P.r.fl[0]] : floorsOf(), Bq = B();
     if (P.mode === 'building') P.b.fl.slice(0, P.b.floors).forEach((f, i) => { if (!floorReady(f) && i > 0) { const p = P.b.fl[i - 1]; f.py = p.py; f.W = p.W; f.D = p.D; f.dim = p.dim; } });
-    const st0 = P.mode === 'building' && !isVilla() && fls.length > 1 ? stairSpec(Bq.stair, Bq.H + 300, false, stairOpt(Bq)) : null;
+    const st0 = P.mode === 'building' && !isVilla() && fls.length > 1 ? stairSpec(Bq.stair, Bq.H + 300, false, stairOpt(Bq)) : P.mode === 'remodel' && !isFile() && P.r.loft.on ? stairSpec(P.r.stair || 'O', Math.max(2100, P.r.H - 1200), false, stairOpt(P.r)) : null;
     fls.forEach((f, i) => { if (!f || (P.mode === 'remodel' && i === 1)) return; if (!Array.isArray(f.blocks)) f.blocks = []; const { W, D } = floorDims(i); f._wantEntry = f.entry === true; syncBlocks(f, W, D, st0, P.mode === 'building' && !isVilla() && fls.length >= 4); if (isFile()) { const o = floorDims(0); f.blocks.forEach(b => { if (b.x >= W + o.x0 + 100 || (b.x === W + 600 && !b.placedFile)) { b.x = o.x0 + 300; b.y = o.y0 + 300; b.placedFile = 1; } }); } });
-    if (P.mode === 'building' && !isVilla()) { const sb = fls[0].blocks.find(q => q.ref === 'stair'); if (sb && !Bq.stairAt) Bq.stairAt = { x: sb.x, y: sb.y }; const eb = fls[0].blocks.find(q => q.ref === 'ev'); if (eb && !Bq.evAt) Bq.evAt = { x: eb.x, y: eb.y }; if (fls.length < 2) { delete Bq.stairAt; delete Bq.evAt; } }
+    if ((P.mode === 'building' && !isVilla()) || (P.mode === 'remodel' && !isFile())) { const sb = fls[0].blocks.find(q => q.ref === 'stair'); if (sb && !Bq.stairAt) Bq.stairAt = { x: sb.x, y: sb.y }; const eb = fls[0].blocks.find(q => q.ref === 'ev'); if (eb && !Bq.evAt) Bq.evAt = { x: eb.x, y: eb.y }; if (!st0) { delete Bq.stairAt; delete Bq.evAt; } }
     ST.M = buildModel(P); ST.solids = buildSolids(ST.M); ST.key++;
     if (!sheets().some(s => s[0] === ST.sheet)) ST.sheet = 'plan0';
     if ((GL3.renderOpt.level || 0) >= ST.M.floors.length) GL3.renderOpt.level = 0;
@@ -3039,11 +3144,32 @@ function updateBar() {
   const M = ST.M, n = M ? M.issues.filter(i => i.level !== 'info').length : 0;
   $('#bCheck').innerHTML = n ? `⚠ 확인 <b>${n}</b>` : '✓ 문제없음'; $('#bCheck').classList.toggle('warn', !!n);
   const fc = $('#floorChips'); const fls = ST.P ? floorsOf() : [];
-  fc.innerHTML = fls.length > 1 ? fls.map((f, i) => `<button data-fl="${i}" aria-pressed="${ST.sheet === 'plan' + i}">${floorLabel(i)}</button>`).join('') : '';
-  fc.onclick = e => { const b = e.target.closest('[data-fl]'); if (!b) return; ST.sheet = 'plan' + b.dataset.fl; select(null); if (ST.view !== '2d') setView('2d'); else draw2D(true); updateBar(); buildPalette(); };
+  const v3 = ST.view !== '2d', fv = GL3.floorView;
+  fc.innerHTML = fls.length > 1 ? (v3 ? `<button data-fv="all" aria-pressed="${fv === 'all'}">전체</button>` + fls.map((f, i) => `<button data-fv="${i}" aria-pressed="${fv === i}">${floorLabel(i)}</button>`).join('') : fls.map((f, i) => `<button data-fl="${i}" aria-pressed="${ST.sheet === 'plan' + i}">${floorLabel(i)}</button>`).join('')) : '';
+  fc.onclick = e => { const v = e.target.closest('[data-fv]'); if (v) { GL3.floorView = v.dataset.fv === 'all' ? 'all' : +v.dataset.fv; GL3.applyFloorView(); updateBar(); return; }
+    const b = e.target.closest('[data-fl]'); if (!b) return; ST.sheet = 'plan' + b.dataset.fl; select(null); draw2D(true); updateBar(); buildPalette(); };
   $('#bSetup').hidden = !ST.P || ST.P.mode !== 'building';
 }
 function afterFix() { rebuild(true); openCheck(); }
+
+/* ---------- 색 테마 ---------- */
+function openTheme() {
+  const T = $('#themePop'), th = ST.P && ST.P.theme || {};
+  if (!T.hidden) { T.hidden = true; return; }
+  T.innerHTML = `<div class="tp-h"><b>🎨 색 테마</b><button class="x" data-tp="close">✕</button></div><p class="ihint">고른 색으로 벽·소파·침구·러그·의자 같은 실내 전체를 꾸밉니다. 렌더링에서 보입니다.</p>
+    <div class="tp-sw">${THEMES.map(([c, n]) => `<button data-tc="${c}" aria-pressed="${th.c === c}" title="${n}"><i style="background:${c}"></i><span>${n}</span></button>`).join('')}<label class="tp-custom"><input type="color" value="${th.c || '#9cc3e6'}" data-tcc><span>직접 고르기</span></label></div>
+    <div class="ichips"><button data-tm="mono" aria-pressed="${th.mode !== 'harmony'}">단색 계열 (비슷한 색)</button><button data-tm="harmony" aria-pressed="${th.mode === 'harmony'}">어울림 (포인트 색)</button></div>
+    <div class="tp-prev">${(() => { const p = themePalette(th.c ? th : null); return ['wall', 'fab1', 'fab2', 'fab3', 'accent', 'rug', 'wood'].map(k => `<i style="background:${p[k]}"></i>`).join(''); })()}</div>
+    <div class="ibtns"><button class="btn" data-tp="none">기본(무채색)으로</button><button class="btn pri" data-tp="render">렌더링으로 보기</button></div>`;
+  T.hidden = false;
+  const set = o => { ST.P.theme = Object.assign({ mode: 'mono' }, ST.P.theme || {}, o); GL3.keyR = null; localStorage.setItem('wonman7.last', JSON.stringify({ P: ST.P, name: ST.name, pid: ST.pid })); T.hidden = true; openTheme(); if (ST.view === 'render') setView('render', true); };
+  T.onclick = e => { const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
+    if (d.tc) set({ c: d.tc }); if (d.tm) set({ mode: d.tm });
+    if (d.tp === 'close') T.hidden = true; if (d.tp === 'none') { delete ST.P.theme; GL3.keyR = null; T.hidden = true; if (ST.view === 'render') setView('render', true); }
+    if (d.tp === 'render') { T.hidden = true; setView('render'); } };
+  T.oninput = e => { if (e.target.dataset.tcc != null) { ST.P.theme = Object.assign({ mode: 'mono' }, ST.P.theme || {}, { c: e.target.value }); GL3.keyR = null; } };
+  T.onchange = e => { if (e.target.dataset.tcc != null) set({ c: e.target.value }); };
+}
 
 /* ---------- 팔레트 (공간 버튼) ---------- */
 function buildPalette() {
@@ -3120,8 +3246,8 @@ function renderInsp() {
         ${b.ref === 'kitchen' || (sp && sp.kind === 'kitchen' && isFile()) ? `<h4>주방 형태</h4><div class="ichips">${Object.entries(KITCHENS).map(([q, v]) => `<button data-ikt="${q}" aria-pressed="${f.kitchen.type === q}">${v}</button>`).join('')}</div><h4>조리대 붙는 쪽</h4><div class="ichips">${[['n', '위'], ['s', '아래'], ['w', '왼쪽'], ['e', '오른쪽']].map(([q, v]) => `<button data-ikm="${q}" aria-pressed="${(f.kitchen.main || 'e') === q}">${v}</button>`).join('')}</div>` : ''}
         ${sp && ['bath', 'dress'].includes(sp.kind) && !isFile() ? `<label class="ilab">붙이기<select data-iatt><option value="">독립 공간</option>${f.spaces.filter(s => ['master', 'bed', 'other'].includes(s.kind)).map(s => `<option value="${s.id}"${sp.attach === s.id ? ' selected' : ''}>${esc(s.name || SPACE_KINDS[s.kind])}에 귀속</option>`).join('')}</select></label>` : ''}
         <p class="ihint">도면에서 공간 안을 끌면 옮겨지고, 변의 네모를 끌면 크기가 바뀝니다. 변을 두 번 누르면 꺾인 모양을 만들 수 있습니다.</p>`;
-    } else if (ST.itab === 'furn') { const fl = furnListOf(b, f); body = (fl ? furnRows(fl, sp ? sp.kind : b.ref, sp ? 'S' + sp.id : b.ref === 'living' ? 'L' : b.ref === 'kitchen' ? 'K' : b.ref === 'dining' ? 'G' : 'X') : '<p class="ihint">신발장이 자동으로 들어갑니다.</p>') + fitLine(room ? room.key : '') + '<p class="ihint">이 탭이 열려 있을 때 도면에서 이 공간의 가구를 끌어 옮기고, 두 번 눌러 돌립니다.</p>'; }
-    else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div><label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
+    } else if (ST.itab === 'furn') { const fl = furnListOf(b, f); body = (fl ? furnRows(fl, sp ? sp.kind : b.ref, sp ? 'S' + sp.id : b.ref === 'living' ? 'L' : b.ref === 'kitchen' ? 'K' : b.ref === 'dining' ? 'G' : 'X') : '<p class="ihint">신발장은 이 탭이 열려 있을 때 도면에서 끌어 옮기고, 두 번 눌러 돌립니다.</p>') + fitLine(room ? room.key : '') + '<p class="ihint">이 탭이 열려 있을 때 도면에서 이 공간의 가구를 끌어 옮기고, 두 번 눌러 돌립니다.</p>'; }
+    else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div><h4>열리는 방향</h4><div class="ichips"><button data-idh="L" aria-pressed="${dr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-idh="R" aria-pressed="${dr.hand === 'R'}">⟳ 오른쪽 경첩</button><button data-ido="0" aria-pressed="${!dr.out}">안쪽으로 열림</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽으로 열림</button></div><label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
         <div class="tipbox">👉 도면에서 이 공간의 <b>벽을 누르면</b> 그 자리로 문이 옮겨집니다.</div><div class="ibtns"><button class="btn" data-ic="dauto">↺ 문 위치 자동</button></div>`; }
     h = `<div class="ih" style="--c:${col}"><i>${SPACE_ICON[kind] || '⬜'}</i><b>${esc(name)}</b><span>${fmt(bbox(b).w)} × ${fmt(bbox(b).d)}</span><button class="x" data-ic="close">✕</button></div>
       ${tabs.length ? `<div class="itabs">${tabs.map(([q, v]) => `<button data-itab="${q}" aria-pressed="${ST.itab === q}">${v}</button>`).join('')}</div>` : ''}<div class="ib">${body}</div>
@@ -3145,6 +3271,8 @@ function bindInsp() {
     if (d.ist) { Bq.stair = d.ist; return rebuild(true); } if (d.isst) { Bq.stairStart = d.isst; return rebuild(true); }
     if (d.ikt) { f.kitchen.type = d.ikt; return rebuild(true); } if (d.ikm) { f.kitchen.main = d.ikm; return rebuild(true); }
     if (d.idt && b) { doorOf(b, f).t = d.idt; return rebuild(true); }
+    if (d.idh && b) { doorOf(b, f).hand = d.idh; return rebuild(true); }
+    if (d.ido && b) { doorOf(b, f).out = d.ido === '1'; return rebuild(true); }
   };
   I.onchange = e => {
     const t = e.target, d = t.dataset, f = curF(), b = selBlock(), Bq = B();
@@ -3306,14 +3434,14 @@ function setView(v, force) {
   const changed = ST.view !== v; ST.view = v;
   $$('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
   $('#v2d').hidden = v !== '2d'; $('#v3d').hidden = v === '2d';
-  $('#bMeasure').hidden = v !== '2d'; document.body.dataset.view = v; if (v !== '2d') setMeasure(false);
+  $('#bMeasure').hidden = v !== '2d'; document.body.dataset.view = v; if (typeof updateBar === 'function' && ST.P && ST.M) updateBar(); if (v !== '2d') setMeasure(false);
   renderOptions();
   if (v === '2d') { draw2D(changed || force); $('#stInfo').textContent = '단위 mm   축척 1/100 기준'; }
   else {
     $('#load3d').hidden = false;
     loadThree().then(() => {
       GL3.init($('#v3d')); $('#load3d').hidden = true;
-      GL3.show(v === 'model' ? 'model' : 'render', ST.M, ST.solids, ST.key);
+      GL3.show(v === 'model' ? 'model' : 'render', ST.M, ST.solids, ST.key); GL3.applyFloorView();
       $('#stInfo').textContent = v === 'model' ? '드래그: 회전   오른쪽 드래그: 이동   휠: 확대' : '사실적 렌더링 — 드래그로 시점 바꾸기';
       $('#xy').textContent = `벽심 ${fmt(ST.M.W)} × ${fmt(ST.M.D)}  ${ST.M.floors.length}층  최고높이 FL+${fmt(Math.round(roofInfo(ST.M).zTop))}`;
     }).catch(() => { $('#load3d').textContent = '3D 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'; });
@@ -3496,7 +3624,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.0 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.1 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
