@@ -2546,10 +2546,14 @@ function dxfText(s) { return [...s].map(ch => ch.charCodeAt(0) < 128 ? ch : '\\U
 function primsDXF(prims, hidden = {}) {
   const o = [], L = k => (LAYERS[k] || LAYERS.aux).dxf, f = v => (+v).toFixed(2);
   const used = [...new Set(prims.filter(p => !hidden[p.L]).map(p => p.L))];
-  o.push('0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC');
+  o.push('0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '4', '9', '$TEXTSTYLE', '7', 'GULIM', '0', 'ENDSEC');
   o.push('0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LTYPE', '70', '2',
     '0', 'LTYPE', '2', 'CONTINUOUS', '70', '0', '3', 'Solid', '72', '65', '73', '0', '40', '0.0',
     '0', 'LTYPE', '2', 'DASHED', '70', '0', '3', '__ __', '72', '65', '73', '2', '40', '150.0', '49', '100.0', '49', '-50.0', '0', 'ENDTAB');
+  // 글씨체: 굴림 (윈도우 gulim.ttc). STANDARD도 굴림으로 맞춰 어느 CAD에서 열어도 굴림으로 보이게
+  o.push('0', 'TABLE', '2', 'STYLE', '70', '2');
+  for (const nm of ['STANDARD', 'GULIM']) o.push('0', 'STYLE', '2', nm, '70', '0', '40', '0.0', '41', '1.0', '50', '0.0', '71', '0', '42', '2.5', '3', 'gulim.ttc', '4', '');
+  o.push('0', 'ENDTAB');
   o.push('0', 'TABLE', '2', 'LAYER', '70', String(used.length));
   for (const k of used) o.push('0', 'LAYER', '2', L(k), '70', '0', '62', String((LAYERS[k] || LAYERS.aux).c), '6', 'CONTINUOUS');
   o.push('0', 'ENDTAB', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES');
@@ -2562,7 +2566,7 @@ function primsDXF(prims, hidden = {}) {
     else if (p.t === 'a') o.push('0', 'ARC', '8', L(p.L), '10', f(p.cx), '20', f(p.cy), '30', '0', '40', f(p.r), '50', f(p.a0), '51', f(p.a1));
     else if (p.t === 't') {
       const al = { start: 0, middle: 1, end: 2 }[p.anchor];
-      o.push('0', 'TEXT', '8', L(p.L), '10', f(p.x), '20', f(p.y), '30', '0', '40', f(p.h * 0.8), '1', dxfText(p.s));
+      o.push('0', 'TEXT', '8', L(p.L), '10', f(p.x), '20', f(p.y), '30', '0', '40', f(p.h * 0.8), '1', dxfText(p.s), '7', 'GULIM');
       if (p.rot) o.push('50', f(p.rot));
       if (al) o.push('72', String(al), '11', f(p.x), '21', f(p.y), '31', '0');
     }
@@ -3727,7 +3731,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.7 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.8 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
