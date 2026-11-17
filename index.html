@@ -958,8 +958,10 @@ function stairZAt(st, lx, ly) {
 const STAIR_CLEAR = 2000, STAIR_THICK = 250;
 function stairZones(st, x0, y0) {
   const g = 100, nx = Math.ceil(st.sw / g), ny = Math.ceil(st.len / g), xf = stairXf({ ...st, x0, y0 }), kind = new Int8Array(nx * ny);
-  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const z = stairZAt(st, Math.min(st.sw, (i + .5) * g), Math.min(st.len, (j + .5) * g)); kind[j * nx + i] = z == null ? 0 : z - STAIR_THICK >= STAIR_CLEAR ? 2 : 1; }
-  const out = { low: [], high: [] }, used = new Uint8Array(nx * ny);
+  const FFs = st.n * st.R, top = new Int8Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const z = stairZAt(st, Math.min(st.sw, (i + .5) * g), Math.min(st.len, (j + .5) * g)); kind[j * nx + i] = z == null ? 0 : z - STAIR_THICK >= STAIR_CLEAR ? 2 : 1; top[j * nx + i] = z == null ? 0 : z >= FFs - 1 ? 2 : 1; }
+  const rectsOf = (arr, k) => { const res = [], u = new Uint8Array(nx * ny); for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { if (arr[j * nx + i] !== k || u[j * nx + i]) continue; let i1 = i; while (i1 + 1 < nx && arr[j * nx + i1 + 1] === k && !u[j * nx + i1 + 1]) i1++; let j1 = j; o2: while (j1 + 1 < ny) { for (let q = i; q <= i1; q++) if (arr[(j1 + 1) * nx + q] !== k || u[(j1 + 1) * nx + q]) break o2; j1++; } for (let jj = j; jj <= j1; jj++) for (let q = i; q <= i1; q++) u[jj * nx + q] = 1; const a = xf(i * g, j * g), b = xf(Math.min(st.sw, (i1 + 1) * g), Math.min(st.len, (j1 + 1) * g)); res.push({ x: Math.round(Math.min(a[0], b[0])), y: Math.round(Math.min(a[1], b[1])), w: Math.round(Math.abs(b[0] - a[0])), d: Math.round(Math.abs(b[1] - a[1])) }); } return res; };
+  const out = { low: [], high: [], tread: rectsOf(top, 1), top: rectsOf(top, 2) }, used = new Uint8Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const k = kind[j * nx + i]; if (!k || used[j * nx + i]) continue;
     let i1 = i; while (i1 + 1 < nx && kind[j * nx + i1 + 1] === k && !used[j * nx + i1 + 1]) i1++;
     let j1 = j; outer: while (j1 + 1 < ny) { for (let q = i; q <= i1; q++) if (kind[(j1 + 1) * nx + q] !== k || used[(j1 + 1) * nx + q]) break outer; j1++; }
@@ -1664,15 +1666,21 @@ function shiftFloorXY(fm, dx, dy) {
 }
 /** 계단 끝과 복층 사이가 떨어져 있으면 계단참으로 잇는다 */
 function loftLanding(M, S0, fm, note, f0) {
-  // 계단을 다 올라온 자리(내리는 곳) 앞 w×900을 출발점으로 삼는다
-  const ex = stairExit(S0), w = S0.w, dep = 900, [px, py] = ex.pt, W0 = f0.W, D0 = f0.D;
-  let E = ex.dir === 'n' ? { x0: px - w / 2, y0: S0.y1, x1: px + w / 2, y1: S0.y1 + dep } : ex.dir === 's' ? { x0: px - w / 2, y0: S0.y0 - dep, x1: px + w / 2, y1: S0.y0 } : ex.dir === 'e' ? { x0: S0.x1, y0: py - w / 2, x1: S0.x1 + dep, y1: py + w / 2 } : { x0: S0.x0 - dep, y0: py - w / 2, x1: S0.x0, y1: py + w / 2 };
-  if (E.x0 < 0 || E.y0 < 0 || E.x1 > W0 || E.y1 > D0) E = ex.dir === 'n' ? { x0: px - w / 2, y0: S0.y1 - dep, x1: px + w / 2, y1: S0.y1 } : ex.dir === 's' ? { x0: px - w / 2, y0: S0.y0, x1: px + w / 2, y1: S0.y0 + dep } : ex.dir === 'e' ? { x0: S0.x1 - dep, y0: py - w / 2, x1: S0.x1, y1: py + w / 2 } : { x0: S0.x0, y0: py - w / 2, x1: S0.x0 + dep, y1: py + w / 2 };
+  // 계단을 다 올라온 자리(맨 위 디딤 다음, 위층 바닥 높이)를 출발점 E로 삼는다
+  const W0 = f0.W, D0 = f0.D, Lr = fm.loftRect, z = stairZones(S0, S0.x0, S0.y0);
+  const ixr = (a, b) => { const x0 = Math.max(a.x, b.x0), y0 = Math.max(a.y, b.y0), x1 = Math.min(a.x + a.w, b.x1), y1 = Math.min(a.y + a.d, b.y1); return x1 - x0 > 20 && y1 - y0 > 20 ? { x0, y0, x1, y1 } : null; };
+  fm.holes = z.tread.map(r => ixr(r, Lr)).filter(Boolean);
+  if (S0.type === 'O' && z.top.length) { // 원형: 계단 전체 사각에서 내리는 자리만 빼고 크게 뚫음 (난간이 깔끔하도록)
+    const xs = z.top.flatMap(r => [r.x, r.x + r.w]), ys = z.top.flatMap(r => [r.y, r.y + r.d]), T0 = { x0: Math.min(...xs) - 100, y0: Math.min(...ys) - 100, x1: Math.max(...xs) + 100, y1: Math.max(...ys) + 100 }, B0 = ixr({ x: S0.x0, y: S0.y0, w: S0.x1 - S0.x0, d: S0.y1 - S0.y0 }, Lr);
+    fm.holes = B0 ? holeRects([B0.x0, B0.y0, B0.x1, B0.y1], T0).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 })) : [];
+  } fm.hole = fm.holes.length ? fm.holes.reduce((a, c) => ({ x0: Math.min(a.x0, c.x0), y0: Math.min(a.y0, c.y0), x1: Math.max(a.x1, c.x1), y1: Math.max(a.y1, c.y1) })) : null;
+  let E;
+  if (z.top.length) { const xs = z.top.flatMap(r => [r.x, r.x + r.w]), ys = z.top.flatMap(r => [r.y, r.y + r.d]); E = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }; }
+  else { const ex = stairExit(S0), [px, py] = ex.pt, w = S0.w; E = { x0: px - w / 2, y0: py - 450, x1: px + w / 2, y1: py + 450 }; }
   E = { x0: Math.round(clamp(E.x0, 0, W0)), y0: Math.round(clamp(E.y0, 0, D0)), x1: Math.round(clamp(E.x1, 0, W0)), y1: Math.round(clamp(E.y1, 0, D0)) };
-  const Lr = fm.loftRect, hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-  { const [x0, x1] = [Math.max(S0.x0, Lr.x0), Math.min(S0.x1, Lr.x1)], [y0, y1] = [Math.max(S0.y0, Lr.y0), Math.min(S0.y1, Lr.y1)]; if (x1 - x0 > 50 && y1 - y0 > 50) fm.hole = { x0, y0, x1, y1 }; }
+  const hit = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
   const insideLoft = E.x0 >= Lr.x0 - 1 && E.x1 <= Lr.x1 + 1 && E.y0 >= Lr.y0 - 1 && E.y1 <= Lr.y1 + 1;
-  if (insideLoft) { if (fm.hole) { const H = fm.hole; fm.hole = null; const cut = [{ x0: H.x0, y0: H.y0, x1: H.x1, y1: H.y1 }]; fm.hole = cut[0]; } fm.landings = []; return; }
+  if (insideLoft) { fm.landings = []; return; }
   const S = E; fm.landings = [E];
   if (hit(E, Lr) || (Math.max(0, Lr.x0 - E.x1, E.x0 - Lr.x1) === 0 && Math.max(0, Lr.y0 - E.y1, E.y0 - Lr.y1) === 0)) { fm.rooms.push({ key: 'landing0', name: '계단참', kind: 'landing', ...E }); return; }
   const L = fm.loftRect, gx = Math.max(0, L.x0 - S.x1, S.x0 - L.x1), gy = Math.max(0, L.y0 - S.y1, S.y0 - L.y1), out = [];
@@ -1704,17 +1712,17 @@ function stairExit(st) {
 }
 /** 복층 난간: 걸을 수 있는 곳(복층+계단참-계단 구멍)의 테두리. 방 바깥벽에 붙은 곳과 계단을 올라와 들어오는 쪽은 비움 */
 function loftRails(fm, f0) {
-  const L = fm.loftRect, S = f0.stair, W0 = f0.W, D0 = f0.D, hole = fm.hole, lands = fm.landings || [];
+  const L = fm.loftRect, S = f0.stair, W0 = f0.W, D0 = f0.D, holes = fm.holes || (fm.hole ? [fm.hole] : []), lands = fm.landings || [];
   const xsS = new Set([L.x0, L.x1]), ysS = new Set([L.y0, L.y1]);
-  for (const r of [...lands, ...(hole ? [hole] : []), ...(S ? [S] : [])]) { xsS.add(r.x0); xsS.add(r.x1); ysS.add(r.y0); ysS.add(r.y1); }
+  for (const r of [...lands, ...holes, ...(S ? [S] : [])]) { xsS.add(r.x0); xsS.add(r.x1); ysS.add(r.y0); ysS.add(r.y1); }
   const xs = [...xsS].sort((a, b) => a - b), ys = [...ysS].sort((a, b) => a - b), nx = xs.length - 1, ny = ys.length - 1;
   const inR = (r, x, y) => r && x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1;
-  const walk = (i, j) => { if (i < 0 || j < 0 || i >= nx || j >= ny) return false; const x = (xs[i] + xs[i + 1]) / 2, y = (ys[j] + ys[j + 1]) / 2; return (inR(L, x, y) || lands.some(r => inR(r, x, y))) && !inR(hole, x, y); };
+  const walk = (i, j) => { if (i < 0 || j < 0 || i >= nx || j >= ny) return false; const x = (xs[i] + xs[i + 1]) / 2, y = (ys[j] + ys[j + 1]) / 2; return (inR(L, x, y) || lands.some(r => inR(r, x, y))) && !holes.some(h => inR(h, x, y)); };
   const ex = S ? stairExit(S) : null, segs = [];
   const skip = (o, c, a, b, ox, oy, nrm) => {
     if (o === 'v' && (Math.abs(c) < 1 || Math.abs(c - W0) < 1)) return true;
     if (o === 'h' && (Math.abs(c) < 1 || Math.abs(c - D0) < 1)) return true;
-    if (S && inR(S, ox, oy)) { if (ex && nrm === { n: 's', s: 'n', e: 'w', w: 'e' }[ex.dir] && (o === 'h' ? ex.pt[0] > a - 1200 && ex.pt[0] < b + 1200 : ex.pt[1] > a - 1200 && ex.pt[1] < b + 1200)) return true; }
+    if (S && inR(S, ox, oy) && !lands.some(r => inR(r, ox, oy))) { if (ex && nrm === { n: 's', s: 'n', e: 'w', w: 'e' }[ex.dir] && (o === 'h' ? ex.pt[0] > a - 1200 && ex.pt[0] < b + 1200 : ex.pt[1] > a - 1200 && ex.pt[1] < b + 1200)) return true; }
     return false;
   };
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
@@ -1925,7 +1933,7 @@ function buildSolids(m) {
       if (r.kind === 'stair' || r.kind === 'landing') continue;
       const I = inner(fm, r);
       const fmat = { bath: 'tile', ensuite: 'tile', entry: 'tileDark', util: 'tile', core: 'tileDark', parking: 'found' }[r.kind] || 'floor';
-      for (const [a0, b0, a1, b1] of holeRects([I.x0, I.y0, I.x1, I.y1], fm.hole)) L('floor', fmat, boxF(a0, b0, -50, a1, b1, 0), { room: r.key });
+      for (const [a0, b0, a1, b1] of holeRects([I.x0, I.y0, I.x1, I.y1], ...(fm.holes || [fm.hole]))) L('floor', fmat, boxF(a0, b0, -50, a1, b1, 0), { room: r.key });
     }
     if (fm.segs) { for (const g of fm.segs) { const dx = g.x2 - g.x1, dy = g.y2 - g.y1, l = Math.hypot(dx, dy); if (l < 20) continue; const nx = -dy / l * 30, ny = dx / l * 30; L('wall', 'wallInt', prismF([[g.x1 + nx, g.y1 + ny], [g.x2 + nx, g.y2 + ny], [g.x2 - nx, g.y2 - ny], [g.x1 - nx, g.y1 - ny]], 'z', 0, H)); } }
     for (const r of (fm.rails || [])) { const hz = r.o === 'h', box = (a0, a1, t, z0, z1, mat) => L('rail', mat, hz ? boxF(a0, r.c - t, z0, a1, r.c + t, z1) : boxF(r.c - t, a0, z0, r.c + t, a1, z1));
@@ -1942,7 +1950,7 @@ function buildSolids(m) {
     if (fm.stair && li < N - 1) stairSolids(fm.stair, FF, L);
     if (li < N - 1) {
       const up = m.floors[li + 1], Wa = Math.max(fm.W, up.W);
-      if (up.loftRect) { const R = up.loftRect; for (const [x0, y0, x1, y1] of holeRects([R.x0, R.y0, R.x1, R.y1], up.hole)) L('slab', 'found', boxF(x0, y0, FF - 200, x1, y1, FF)); for (const g of (up.landings || [])) L('slab', 'found', boxF(g.x0, g.y0, FF - 200, g.x1, g.y1, FF)); }
+      if (up.loftRect) { const R = up.loftRect; for (const [x0, y0, x1, y1] of holeRects([R.x0, R.y0, R.x1, R.y1], ...(up.holes || [up.hole]))) L('slab', 'found', boxF(x0, y0, FF - 200, x1, y1, FF)); for (const g of (up.landings || [])) L('slab', 'found', boxF(g.x0, g.y0, FF - 200, g.x1, g.y1, FF)); }
       else for (const [x0, y0, x1, y1] of holeRects([-100, -100, Wa + 100, Math.max(fm.D || D, up.D || D) + 100], fm.stair || up.stair, fm.ev || up.ev)) L('slab', 'found', boxF(x0, y0, H, x1, y1, FF));
       if (!up.loftRect && fm.W > up.W + 300) { // 아래층이 넓으면 드러난 지붕(테라스) + 난간벽
         const xa = up.W + 100, xb = fm.W + 100;
@@ -2286,7 +2294,7 @@ function planPrims(M, fi = 0) {
   if (m.loftRect) { const lw = M.floors[0];
     for (const w of lw.walls) { const t = w.t / 2; if (w.o === 'h') g.r('aux', w.a, w.c - t, w.b, w.c + t, { dash: 1 }); else g.r('aux', w.c - t, w.a, w.c + t, w.b, { dash: 1 }); }
     if (lw.stair) { const n0 = g.out.length, sw0 = lw.stair, loc = { ...sw0, x0: 0, y0: 0, x1: sw0.sw, y1: sw0.len }, xf = stairXf(sw0); stairPlan(g, loc, M.FF, 0, 1); for (const p of g.out.slice(n0)) { p.L = 'aux'; p.o = { ...(p.o || {}), dash: 1 }; if (p.t === 'l') { [p.x1, p.y1] = xf(p.x1, p.y1); [p.x2, p.y2] = xf(p.x2, p.y2); } else if (p.t === 'p') p.pts = p.pts.map(q => xf(q[0], q[1])); else if (p.t === 'c') [p.cx, p.cy] = xf(p.cx, p.cy); else if (p.t === 'a') { [p.cx, p.cy] = xf(p.cx, p.cy); p.a0 += sw0.rot || 0; p.a1 += sw0.rot || 0; } else if (p.t === 't') { g.out.splice(g.out.indexOf(p), 1); } } g.tx('label', (sw0.x0 + sw0.x1) / 2, sw0.y0 - 260, '아래층 계단', 150, 'middle', { halo: 1 }); }
-    if (m.hole) { const h = m.hole; g.r('aux', h.x0, h.y0, h.x1, h.y1, { fill: 'rf-void' }); g.l('aux', h.x0, h.y0, h.x1, h.y1); g.l('aux', h.x0, h.y1, h.x1, h.y0); g.tx('label', (h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2 + 200, '계단 오름 (뚫림)', 140, 'middle', { halo: 1 }); }
+    if (m.hole) { for (const h of (m.holes || [m.hole])) { g.r('aux', h.x0, h.y0, h.x1, h.y1, { fill: 'rf-void' }); g.l('aux', h.x0, h.y0, h.x1, h.y1); g.l('aux', h.x0, h.y1, h.x1, h.y0); } const h = m.hole; g.tx('label', (h.x0 + h.x1) / 2, (h.y0 + h.y1) / 2 + 200, '계단 오름 (뚫림)', 140, 'middle', { halo: 1 }); }
     for (const r of (m.rails || [])) { if (r.o === 'h') { g.l('wall', r.a, r.c - 30, r.b, r.c - 30); g.l('wall', r.a, r.c + 30, r.b, r.c + 30); } else { g.l('wall', r.c - 30, r.a, r.c - 30, r.b); g.l('wall', r.c + 30, r.a, r.c + 30, r.b); } }
     if ((m.rails || []).length) { const r = m.rails[0]; g.tx('label', r.o === 'h' ? (r.a + r.b) / 2 : r.c + 250, r.o === 'h' ? r.c + 220 : (r.a + r.b) / 2, '난간 h1,000', 120, 'middle', { halo: 1 }); }
     if (false) g.r('aux', lw.stair.x0, lw.stair.y0, lw.stair.x1, lw.stair.y1, { dash: 1 }); for (const q of (m.landings || [])) { g.r('stair', q.x0, q.y0, q.x1, q.y1); g.l('stair', q.x0, q.y0, q.x1, q.y1); } }
@@ -2725,7 +2733,8 @@ const GL3 = {
     });
     const wallTex = matTex(WM.c, WM.t), roofTex = matTex(RM.c, RM.t);
     const metalWall = /seam|wave|panel/.test(WM.t) && !/terracotta/.test(spec.wallMat), metalRoof = /seam/.test(RM.t);
-    const floorT = T(1024, (g, s) => { const n = 8; for (let i = 0; i < n; i++) { const y = i * s / n; g.fillStyle = `hsl(30,${40 + rnd() * 8}%,${62 + rnd() * 6}%)`; g.fillRect(0, y, s, s / n); for (let k = 0; k < 50; k++) { g.fillStyle = `rgba(110,70,35,${.04 + rnd() * .06})`; g.fillRect(rnd() * s, y + rnd() * s / n, 40 + rnd() * 160, 1.5); } g.fillStyle = 'rgba(80,50,25,.35)'; g.fillRect(0, y, s, 1.5); g.fillRect(rnd() * s, y, 1.5, s / n); } });
+    const palT = themePalette(model.P && model.P.theme), [fh, fs, fl] = palT.floor;
+    const floorT = T(1024, (g, s) => { const n = 8; for (let i = 0; i < n; i++) { const y = i * s / n; g.fillStyle = `hsl(${fh},${(fs * 100) - 3 + rnd() * 6}%,${(fl * 100) - 3 + rnd() * 6}%)`; g.fillRect(0, y, s, s / n); for (let k = 0; k < 50; k++) { g.fillStyle = `rgba(110,70,35,${.04 + rnd() * .06})`; g.fillRect(rnd() * s, y + rnd() * s / n, 40 + rnd() * 160, 1.5); } g.fillStyle = 'rgba(80,50,25,.35)'; g.fillRect(0, y, s, 1.5); g.fillRect(rnd() * s, y, 1.5, s / n); } });
     const tileT = (base, n) => T(512, (g, s) => { noise(g, s, base, .05, 5000, 2); g.strokeStyle = 'rgba(90,90,90,.5)'; g.lineWidth = 3; for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * s / n, 0); g.lineTo(i * s / n, s); g.stroke(); g.beginPath(); g.moveTo(0, i * s / n); g.lineTo(s, i * s / n); g.stroke(); } });
     const deckT = T(512, (g, s) => { g.fillStyle = '#6e4e36'; g.fillRect(0, 0, s, s); for (let i = 0; i < 8; i++) { g.fillStyle = `hsl(25,${32 + rnd() * 10}%,${30 + rnd() * 8}%)`; g.fillRect(i * s / 8 + 3, 0, s / 8 - 6, s); } });
     const grass = T(1024, (g, s) => { g.fillStyle = '#5f7f3e'; g.fillRect(0, 0, s, s); for (let i = 0; i < 50000; i++) { const h = 78 + rnd() * 30, l = 24 + rnd() * 22; g.strokeStyle = `hsla(${h},45%,${l}%,.55)`; g.lineWidth = 1; const x = rnd() * s, y = rnd() * s; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - .5) * 3, y - 3 - rnd() * 5); g.stroke(); } });
@@ -2740,12 +2749,18 @@ const GL3 = {
     };
     M.glassFrost = M.glass.clone(); M.glassFrost.opacity = .7; M.glassFrost.color = new THREE.Color(0xdde6ea);
     const matFor = (mat) => M[mat] || (M[mat] = S({ color: new THREE.Color(MATCOL[mat] || '#cccccc'), roughness: /steel|frame/.test(mat) ? .35 : .7, metalness: /steel|frame/.test(mat) ? .6 : 0 }));
-    const uvS = mat => ({ wallExt: WM.t === 'brick' ? 1 / 1.6 : WM.t === 'louver' ? 1 / 1.2 : 1 / 2.4, roof: 1 / 1.8, floor: 1 / 2.4, tile: 1 / 1.2, tileDark: 1 / 1.2, deck: 1 / 1.2 }[mat] || 1);
+    const uvS = mat => ({ wallInt: 1 / 1.2, wallExt: WM.t === 'brick' ? 1 / 1.6 : WM.t === 'louver' ? 1 / 1.2 : 1 / 2.4, roof: 1 / 1.8, floor: 1 / 2.4, tile: 1 / 1.2, tileDark: 1 / 1.2, deck: 1 / 1.2 }[mat] || 1);
 
     const scene = new THREE.Scene();
     const G = { ext: new THREE.Group(), plan: new THREE.Group(), common: new THREE.Group() }; Object.values(G).forEach(g => scene.add(g));
     const extOnly = s => ['roof', 'ceiling', 'gutter'].includes(s.layer) || (s.layer === 'wall' && s.gable) || s.mat === 'vent' || ['wall', 'window', 'door'].includes(s.layer);
-    const pal = themePalette(model.P && model.P.theme); M.wallInt.color = new THREE.Color(pal.wall);
+    const pal = palT;
+    if (pal.wp) { // 벽지: 고른 색 계열의 은은한 결 무늬
+      const { h: wh, s: ws, mono } = pal.wp;
+      M.wallInt.map = T(512, (g, sz) => { g.fillStyle = pal.wall; g.fillRect(0, 0, sz, sz); if (mono) { for (let x = 0; x < sz; x += 16) { g.fillStyle = `hsla(${wh},${ws * 60}%,${70 + (x / 16 % 2) * 6}%,.10)`; g.fillRect(x, 0, 8, sz); } } else { for (let i = 0; i < 90; i++) { g.fillStyle = `hsla(${wh + 180},${ws * 50}%,75%,.10)`; const x = rnd() * sz, y = rnd() * sz; g.beginPath(); g.arc(x, y, 6 + rnd() * 8, 0, 7); g.fill(); } } for (let i = 0; i < 4000; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * .025})`; g.fillRect(rnd() * sz, rnd() * sz, 2, 2); } });
+      M.wallInt.color = new THREE.Color(0xffffff); M.wallInt.needsUpdate = true;
+      M.tile.map = tileT(pal.tile, 4); M.tile.needsUpdate = true;
+    } else M.wallInt.color = new THREE.Color(pal.wall);
     for (const g of fancyFurniture(model, pal)) G.common.add(g);
     for (const me of this.meshes(solids, matFor, uvS, s => s.layer !== 'furn' || s.mat === 'wallExt')) {
       const { layer, mat } = me.userData; me.castShadow = !/glass/.test(mat); me.receiveShadow = true;
@@ -2880,10 +2895,13 @@ function hexHsl(hex) { const n = parseInt(hex.slice(1), 16); let r = (n >> 16) /
 const hsl = (h, s, l) => `hsl(${((h % 360) + 360) % 360},${clamp(s, 0, 1) * 100}%,${clamp(l, 0, 1) * 100}%)`;
 /** 고른 색 하나로 집 전체 색 묶음을 만든다. mono=같은 계열, harmony=어울리는 보색 포인트 */
 function themePalette(theme) {
-  if (!theme || !theme.c) return { wall: '#f6f4ef', fab1: '#cfc6b8', fab2: '#9aae94', fab3: '#e9e3d8', accent: '#7f8c8d', rug: '#ddd3c2', wood: '#b88a5e', woodDark: '#6b4a33', linen: '#fbfaf6', cab: '#efebe4', metal: '#b9975b' };
+  if (!theme || !theme.c) return { wall: '#f6f4ef', fab1: '#cfc6b8', fab2: '#9aae94', fab3: '#e9e3d8', accent: '#7f8c8d', rug: '#ddd3c2', wood: '#b88a5e', woodDark: '#6b4a33', linen: '#fbfaf6', cab: '#efebe4', metal: '#b9975b', floor: [30, .44, .65], wp: null, tile: '#d9dadb' };
   const [h, s, l] = hexHsl(theme.c), mono = theme.mode !== 'harmony', s2 = Math.min(s, .55);
+  // 바닥: 따뜻한 색은 원목, 차가운 색은 회색빛 오크, 어두운 색은 월넛, 아주 밝은 색은 화이트 오크
+  const cool = h > 165 && h < 290, floor = l < .4 ? [26, .36, .38] : cool ? [36, .12 + s2 * .1, .70] : l > .78 ? [38, .30, .78] : [28 + (h < 60 ? h * .1 : 0), .40, .63];
   return {
-    wall: hsl(h, s2 * .35, .955), fab1: theme.c, fab2: mono ? hsl(h + 18, s2 * .8, clamp(l + .12, .35, .82)) : hsl(h + 180, s2 * .7, clamp(l, .4, .7)),
+    floor, wp: { h, s: s2, mono }, tile: hsl(h, s2 * .25, .86),
+    wall: hsl(h, s2 * .55, .915), fab1: theme.c, fab2: mono ? hsl(h + 18, s2 * .8, clamp(l + .12, .35, .82)) : hsl(h + 180, s2 * .7, clamp(l, .4, .7)),
     fab3: hsl(h - 15, s2 * .45, .88), accent: hsl(h + (mono ? -8 : 150), Math.min(.65, s2 + .1), clamp(l - .22, .2, .5)), rug: hsl(h + 8, s2 * .4, .82),
     wood: hsl(30, .38, .52), woodDark: hsl(25, .35, .28), linen: hsl(h, s2 * .2, .97), cab: hsl(h, s2 * .25, .93), metal: '#b9975b'
   };
@@ -3218,10 +3236,10 @@ function afterFix() { rebuild(true); openCheck(); }
 function openTheme() {
   const T = $('#themePop'), th = ST.P && ST.P.theme || {};
   if (!T.hidden) { T.hidden = true; return; }
-  T.innerHTML = `<div class="tp-h"><b>🎨 색 테마</b><button class="x" data-tp="close">✕</button></div><p class="ihint">고른 색으로 벽·소파·침구·러그·의자 같은 실내 전체를 꾸밉니다. 렌더링에서 보입니다.</p>
+  T.innerHTML = `<div class="tp-h"><b>🎨 색 테마</b><button class="x" data-tp="close">✕</button></div><p class="ihint">고른 색으로 벽지·바닥·욕실 타일·소파·침구·러그·의자 같은 실내 전체를 꾸밉니다. 렌더링에서 보입니다.</p>
     <div class="tp-sw">${THEMES.map(([c, n]) => `<button data-tc="${c}" aria-pressed="${th.c === c}" title="${n}"><i style="background:${c}"></i><span>${n}</span></button>`).join('')}<label class="tp-custom"><input type="color" value="${th.c || '#9cc3e6'}" data-tcc><span>직접 고르기</span></label></div>
     <div class="ichips"><button data-tm="mono" aria-pressed="${th.mode !== 'harmony'}">단색 계열 (비슷한 색)</button><button data-tm="harmony" aria-pressed="${th.mode === 'harmony'}">어울림 (포인트 색)</button></div>
-    <div class="tp-prev">${(() => { const p = themePalette(th.c ? th : null); return ['wall', 'fab1', 'fab2', 'fab3', 'accent', 'rug', 'wood'].map(k => `<i style="background:${p[k]}"></i>`).join(''); })()}</div>
+    <div class="tp-prev">${(() => { const p = themePalette(th.c ? th : null); return ['wall', 'fab1', 'fab2', 'fab3', 'accent', 'rug'].map(k => `<i style="background:${p[k]}"></i>`).join('') + `<i style="background:hsl(${p.floor[0]},${p.floor[1] * 100}%,${p.floor[2] * 100}%)"></i>`; })()}</div>
     <div class="ibtns"><button class="btn" data-tp="none">기본(무채색)으로</button><button class="btn pri" data-tp="render">렌더링으로 보기</button></div>`;
   T.hidden = false;
   const set = o => { ST.P.theme = Object.assign({ mode: 'mono' }, ST.P.theme || {}, o); GL3.keyR = null; localStorage.setItem('wonman7.last', JSON.stringify({ P: ST.P, name: ST.name, pid: ST.pid })); T.hidden = true; openTheme(); if (ST.view === 'render') setView('render', true); };
@@ -3705,7 +3723,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.5 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 7.6 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
