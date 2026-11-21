@@ -1134,7 +1134,7 @@ function buildModel(P) {
 function buildVilla(P) {
   const b = P.b, N = b.floors, FF = b.H + 300, units = b.units || 1, ev = N >= 4;
   const f0 = b.fl[0], Wu = f0.W, D = floorDepth(f0);
-  const st = stairSpec(b.stair, FF, true, stairOpt(b)), core = villaCore(units, st, ev);
+  const st = stairSpec(b.stair, FF, true, { ...stairOpt(b), start: 's' }), core = villaCore(units, st, ev);
   const spec = { type: '빌라', roof: b.roof, pitch: b.pitch, wallMat: b.wallMat, roofMat: b.roofMat, H: b.H, floors: N, remodel: false };
   const M = { W: units * Wu + core.cw, D, H: b.H, FF, spec, st, floors: [], issues: [], warn: [], deck: null, P, units, ev };
   if (Wu < MIN_SIDE || D < MIN_SIDE) addIssue(M.issues, `세대 크기 ${fmt(Wu)} × ${fmt(D)}mm는 너무 작습니다. 최소 ${fmt(MIN_SIDE)}mm씩 필요합니다.`, [], { level: 'err' });
@@ -1468,7 +1468,7 @@ function shiftFloor(fm, dx) {
 /** 한 세대 평면을 따로 만들고 공용 계단실(가운데)과 합친다 */
 function villaCore(units, st, ev) {
   const EVW = 1900, EVD = 2100;
-  const cw = r100(Math.max(st.fw + 300, ev ? EVW + 1300 : 0, 2600));
+  const cw = r100(Math.max(st.fw + 300 + (ev ? EVW + 100 : 0), 2600));
   return { cw, EVW, EVD };
 }
 function layoutVillaFloor(M, f, o) {
@@ -1476,21 +1476,28 @@ function layoutVillaFloor(M, f, o) {
   const Wt = units * Wu + core.cw, cx0 = units === 2 ? Wu : 0, cx1 = cx0 + core.cw;
   const m = { W: Wt, D, H: M.H, spec: M.spec, rooms: [], walls: [], furn: [], warn: [], fits: [], issues: [], fi: i, stepLines: [], zoneLines: [] };
   const err = (msg, fixes, lvl = 'err') => addIssue(m.issues, pre + msg, fixes, { level: lvl });
-  // 계단실: 계단은 북쪽 끝, 엘리베이터는 그 앞, 남쪽은 복도(홀)
-  const sx0 = cx0 + (core.cw - st.fw) / 2, sy1 = D - 100, sy0 = sy1 - st.fd;
-  const stair = { ...st, x0: sx0, x1: sx0 + st.fw, y0: sy0, y1: sy1 };
-  const hallTop = ev ? sy0 - core.EVD : sy0;
-  if (hallTop < 1700) err(`계단실 깊이가 모자랍니다. 계단(${STAIRS[st.type]} ${fmt(st.fd)})${ev ? ' + 엘리베이터' : ''} 앞에 복도 1,600mm가 필요합니다. 세대 깊이를 ${fmt(r100(1700 - hallTop))}mm 늘리거나 계단을 바꿔 주세요.`, [st.type !== 'O' ? { label: '원형 계단으로', act: { t: 'stair', v: 'O' } } : null, { label: `세대 평수 ${Math.ceil(floorPyNeeded(Wu, D + 1700 - hallTop))}평으로`, act: { t: 'py', fi: 0, v: Math.min(MAX_PY, Math.ceil(floorPyNeeded(Wu, D + 1700 - hallTop))) } }]);
+  // 계단실: 공동현관(남쪽 가운데) → 복도 → 북쪽에 계단과 엘리베이터를 나란히 두고, 둘 다 입구가 복도를 향하게
+  const nTop = D - 100, sx0 = cx0 + 150, stair = { ...st, x0: sx0, x1: sx0 + st.fw, y0: nTop - st.fd, y1: nTop };
+  let e = ev ? { x0: stair.x1 + 100, x1: stair.x1 + 100 + core.EVW, y0: nTop - core.EVD, y1: nTop } : null;
+  if (e && e.x1 > cx1 - 100) { const dx = e.x1 - (cx1 - 100); e = { ...e, x0: e.x0 - dx, x1: e.x1 - dx }; }
+  const hallTop = Math.min(stair.y0, e ? e.y0 : Infinity), hallW = core.cw - 200;
+  if (hallTop < 1700) err(`계단실 깊이가 모자랍니다. 계단(${STAIRS[st.type]} ${fmt(st.fd)})${ev ? '·엘리베이터' : ''} 앞에 복도 1,600mm가 필요합니다. 세대 깊이를 ${fmt(r100(1700 - hallTop))}mm 늘리거나 계단을 바꿔 주세요.`, [st.type !== 'O' ? { label: '원형 계단으로', act: { t: 'stair', v: 'O' } } : null, { label: `세대 평수 ${Math.ceil(floorPyNeeded(Wu, D + 1700 - hallTop))}평으로`, act: { t: 'py', fi: 0, v: Math.min(MAX_PY, Math.ceil(floorPyNeeded(Wu, D + 1700 - hallTop))) } }]);
   const cS = addWall(m, 'h', 0, cx0 - 100, cx1 + 100, 200, true), cN = addWall(m, 'h', D, cx0 - 100, cx1 + 100, 200, true);
   if (units === 1) addWall(m, 'v', 0, 100, D - 100, 200, true);
   if (i === 0) op(cS, (cx0 + cx1) / 2 - 600, (cx0 + cx1) / 2 + 600, 'front', 0, 2300, { side: -1, hinge: 'a', double: true });
   else win(cS, (cx0 + cx1) / 2, 1200, 900, 2200);
-  win(cN, (cx0 + cx1) / 2, 900, 1200, 2000);
   m.rooms.push({ key: 'core', name: i === 0 ? '공동현관·복도' : '복도', kind: 'core', x0: cx0, y0: 0, x1: cx1, y1: hallTop, common: true });
-  m.rooms.push({ key: 'stair', name: '계단', kind: 'stair', x0: cx0, y0: sy0, x1: cx1, y1: D, common: true });
-  addWall(m, 'v', stair.x0, sy0, sy1, 100, false); addWall(m, 'v', stair.x1, sy0, sy1, 100, false);
+  m.rooms.push({ key: 'stair', name: '계단', kind: 'stair', x0: stair.x0, y0: stair.y0, x1: stair.x1, y1: D, common: true });
+  if (stair.x0 > cx0 + 60) addWall(m, 'v', stair.x0, stair.y0, nTop, 100, false); addWall(m, 'v', stair.x1, stair.y0, nTop, 100, false);
   m.stair = stair;
-  if (ev) { const e = { x0: (cx0 + cx1) / 2 - core.EVW / 2, x1: (cx0 + cx1) / 2 + core.EVW / 2, y0: hallTop, y1: sy0 }; evShaft(m, e, 's'); m.ev = e; }
+  if (e) { evShaft(m, e, 's'); m.ev = e; }
+  else win(cN, (stair.x1 + cx1) / 2, 900, 1200, 2000);
+  // 출입 동선: 공동현관(위층은 계단 도착점)에서 엘리베이터 문·계단 오르는 곳까지
+  { const sp = stairStartPt(stair), start = i === 0 ? [(cx0 + cx1) / 2, 350] : [sp[0], hallTop - 350], tg = [];
+    if (e) tg.push(['엘리베이터', [(e.x0 + e.x1) / 2, e.y0 - 350]]); if (i === 0 || !e) tg.push(['계단', [sp[0], stair.y0 - 350]]);
+    const ok = hallW >= 1200 && hallTop >= 1500, wv = Math.min(hallW, hallTop);
+    m.flowPaths = tg.map(([n, t]) => ({ name: `${i === 0 ? '공동현관' : '복도'} → ${n}`, key: 'core-' + n, ok, width: wv, at: [t[0], t[1] + 520], minAt: null, pts: [start, [start[0], t[1]], t] }));
+    if (!ok) err(`공동 복도가 좁습니다 (폭 ${fmt(hallW)}·깊이 ${fmt(hallTop)}mm). 1,200mm 이상이 좋습니다.`, [], 'warn'); }
   if (piloti) {
     addWall(m, 'v', cx0, 100, D - 100, 200, true); if (units === 2 || cx1 < Wt) addWall(m, 'v', cx1, 100, D - 100, 200, true);
     const sides = units === 2 ? [[0, cx0], [cx1, Wt]] : [[cx1, Wt]];
@@ -4179,7 +4186,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.5 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.6 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
