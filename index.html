@@ -625,6 +625,8 @@ const BASE_CATALOG = [
   { id: 'dryer', name: '건조기', syn: ['의류건조기'], w: 600, d: 650, h: 850, c: 700, room: '다용도실', kind: 'washer' },
   { id: 'styler', name: '스타일러', syn: ['의류관리기', '에어드레서'], w: 450, d: 600, h: 1850, c: 700, room: '침실', kind: 'box' },
   { id: 'shoe', name: '신발장', syn: [], w: 1200, d: 350, h: 1000, c: 600, room: '현관', kind: 'box', flex: [600, 3000] },
+  { id: 'shoeTall', name: '키 큰 신발장', syn: ['붙박이 신발장'], w: 900, d: 400, h: 2300, c: 600, room: '현관', kind: 'box', flex: [450, 3000] },
+  { id: 'bench', name: '벤치', syn: ['긴 의자'], w: 1200, d: 400, h: 450, c: 400, room: '다이닝', kind: 'box', flex: [600, 2400] },
   { id: 'hanger', name: '옷걸이 수납', syn: ['행거', '시스템 행거'], w: 1800, d: 550, h: 2100, c: 650, room: '드레스룸', kind: 'wardrobe', flex: [900, 4000] },
   { id: 'shelf', name: '선반', syn: ['수납 선반'], w: 1200, d: 400, h: 2100, c: 600, room: '팬트리', kind: 'wardrobe', flex: [600, 4000] },
   { id: 'usink', name: '다용도 개수대', syn: [], w: 550, d: 500, h: 850, c: 600, room: '다용도실', kind: 'box' },
@@ -639,7 +641,6 @@ const BASE_CATALOG = [
   { id: 'officeChair', name: '사무용 의자', syn: ['컴퓨터 의자'], w: 620, d: 620, h: 1000, c: 300, room: '방', kind: 'box' },
   { id: 'diningChair', name: '식탁 의자', syn: ['의자'], w: 450, d: 520, h: 850, c: 300, room: '다이닝', kind: 'box' },
   { id: 'stool', name: '스툴', syn: ['바 의자'], w: 400, d: 400, h: 450, c: 200, room: '주방', kind: 'box' },
-  { id: 'bench', name: '벤치', syn: ['긴 의자'], w: 1200, d: 400, h: 450, c: 400, room: '다이닝', kind: 'box', flex: [600, 2400] },
   { id: 'rugU', name: '러그', syn: ['카펫'], w: 2000, d: 1400, h: 10, c: 0, room: '거실', kind: 'rug', flex: [600, 4000] },
   { id: 'mat', name: '매트리스', syn: ['토퍼'], w: 1000, d: 2000, h: 200, c: 0, room: '복층', kind: 'box' },
   { id: 'lowtable', name: '좌식 테이블', syn: [], w: 1000, d: 600, h: 350, c: 0, room: '복층', kind: 'box' },
@@ -705,6 +706,7 @@ const SPACE_KINDS = { master: '안방', bed: '침대방', other: '그외 방', b
 const DEF_SIZE = { living: [4200, 3600], kitchen: [2700, 2400], dining: [2400, 2400], master: [3600, 3300], bed: [3000, 3000], other: [2700, 2700], bath: [1800, 2400], dress: [1800, 2400], util: [1600, 1800], pantry: [1200, 1800] };
 /* 공간별 기본 가구: on=처음 선택, size=사이즈를 직접 정해야 하는 가구 */
 const SPACE_FURN = {
+  entry: [['shoe', 1, 1, 'size'], ['shoeTall', 1, 0, 'size'], ['dresser', 1, 0], ['bench', 1, 0, 'size'], ['plantP', 1, 0]],
   master: [['bed_q', 1, 1], ['bed_k', 1, 0], ['rugU', 1, 0, 'size'], ['armchair', 1, 0], ['rocking', 1, 0], ['wardrobe', 1, 1, 'size'], ['night', 2, 1], ['vanityT', 1, 0], ['dresser', 1, 0], ['styler', 1, 0], ['aircon', 1, 0]],
   bed: [['bed_s', 1, 1], ['officeChair', 1, 0], ['armchair', 1, 0], ['bed_ss', 1, 0], ['bunk', 1, 0], ['desk', 1, 1], ['wardrobe', 1, 1, 'size'], ['bookcase', 1, 0, 'size'], ['crib', 1, 0]],
   other: [['desk', 1, 1], ['officeChair', 1, 0], ['lounge', 1, 0], ['armchair', 1, 0], ['bookcase', 1, 1, 'size'], ['sofa2', 1, 0], ['piano', 1, 0], ['treadmill', 1, 0]],
@@ -1318,11 +1320,11 @@ function furnList(list) { return (list || []).filter(x => x.n > 0).map(x => ({ i
 function furnishV4(m, r, f, o, err) {
   const I = inner(m, r), FW = freeObs(m, I);
   if (I.x1 - I.x0 < 400 || I.y1 - I.y0 < 400) { // 아주 작은 공간: 가구는 모두 들어가지 않음
-    const list = r.sp ? r.sp.furn : r.kind === 'living' ? f.livingFurn : r.kind === 'kitchen' ? (f.kitchen.furn || []).filter(x => x.id !== 'fridgeU') : [];
+    const list = r.sp ? r.sp.furn : r.kind === 'entry' ? (f.entryFurn || [{ id: 'shoe', n: 1 }]) : r.kind === 'living' ? f.livingFurn : r.kind === 'kitchen' ? (f.kitchen.furn || []).filter(x => x.id !== 'fridgeU') : [];
     r.fit = { fails: (list || []).filter(x => x.n > 0).map(x => ({ id: x.id, label: (catById(x.id) || {}).name || x.id, reason: '방보다 큼' })), flow: [] }; m.fits.push({ room: r.key, name: r.name, fails: r.fit.fails, flow: [], paths: [] }); return; }
-  if (r.kind === 'entry' && m.blockMode) { const w = Math.min(1200, I.x1 - I.x0 - 100); if (w >= 400) F(m, 'shoe', I.x0, I.y1 - 350, I.x0 + w, I.y1, 1000, { side: 'n', label: '신발장' }); return; }
   const report = (res, label) => { for (const x of res.fails) err(`${r.name}: ${x.label} — ${x.reason}`, [{ label: `${x.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'fdel', id: r.sp ? r.sp.id : 'living', fid: x.id } }, SMALLER_BED[x.id] && r.sp ? { label: `${catById(SMALLER_BED[x.id]).name}로 바꾸기`, act: { t: 'fswap', id: r.sp.id, fid: x.id, to: SMALLER_BED[x.id] } } : null, r.sp ? { label: `${r.name} 가로 +600`, act: { t: 'sset', id: r.sp.id, key: 'w', v: r.sp.w + 600 } } : null], 'furn');
     for (const x of res.flow.filter(q => !q.ok)) err(`${r.name}: ${x.label} 앞까지 갈 통로(폭 500mm)가 없습니다.`, [{ label: `${x.label.replace(/ \d+개$/, '')} 하나 빼기`, act: { t: 'fdel', id: r.sp ? r.sp.id : 'living', fid: x.id } }], 'furn'); };
+  if (r.kind === 'entry' && m.blockMode) { const res = solveRoom(m, r, I, furnList(f.entryFurn || [{ id: 'shoe', n: 1, w: 1200, d: 350 }]), FW, f.entryPos); pushPlaced(m, r, res); report(res); return; }
   if (['master', 'bed', 'other', 'dress', 'util', 'pantry', 'storage'].includes(r.kind)) {
     const res = solveRoom(m, r, I, furnList(r.sp.furn), FW, r.sp.fpos); pushPlaced(m, r, res); if (!r.sp.id.startsWith('fill')) report(res); return;
   }
@@ -1566,7 +1568,7 @@ function layoutBlocks(M, f, o) {
   if (st && !blocks.some(b => b.ref === 'stair')) err('계단 블록이 없습니다.', []);
   const kindOf = b => ['living', 'kitchen', 'dining', 'entry', 'stair', 'ev'].includes(b.ref) ? b.ref : (f.spaces.find(s => s.id === b.ref) || {}).kind || 'other';
   const K = f.kitchen, Dg = f.dining, front = o.front || { w: 900, mid: false };
-  const openOf = b => { const k = kindOf(b); if (OPEN_KINDS.has(k) || k === 'ev') return true; if (k === 'kitchen') return !K || K.door.t === 'none'; if (k === 'dining') return !Dg || Dg.door.t === 'none'; if (k === 'entry') return !front.mid; return false; };
+  const openOf = b => { const k = kindOf(b); if (OPEN_KINDS.has(k) || k === 'ev') return true; if (k === 'kitchen') return !K || K.door.t === 'none'; if (k === 'dining') return !Dg || Dg.door.t === 'none'; if (k === 'entry') return !(front.midType ?? (front.mid ? 3 : 0)); return false; };
   // 좌표 압축 격자
   const cut = (v, lim) => clamp(Math.round(v), 0, lim), xsS = new Set([0, W]), ysS = new Set([0, D]);
   blocks.forEach(b => { blockPts(b).forEach(([x, y]) => { xsS.add(cut(x, W)); ysS.add(cut(y, D)); }); [...(b.rects || []), ...(b.high || [])].forEach(r => { xsS.add(cut(r.x, W)); xsS.add(cut(r.x + r.w, W)); ysS.add(cut(r.y, D)); ysS.add(cut(r.y + r.d, D)); }); });
@@ -1633,7 +1635,10 @@ function layoutBlocks(M, f, o) {
   const parentIdx = b => { const sp = f.spaces.find(s => s.id === b.ref); if (!sp || !sp.attach) return -2; return placed.findIndex(p => p.ref === sp.attach); };
   placed.forEach((b, k) => {
     const kind = kindOf(b);
-    if (kind === 'entry') { if (front.mid) { const cand = runs.filter(r => r.z.includes(k) && isOpenZ(r.z[0] === k ? r.z[1] : r.z[0])).sort((a, c) => (c.b - c.a) - (a.b - a.a))[0]; if (cand) op(cand.wall, cand.a + 150, Math.min(cand.b - 150, cand.a + 1950), 'triple', 0, 2300, { side: cand.z[1] === k ? -1 : 1 }); } return; }
+    if (kind === 'entry') { const mt = front.midType ?? (front.mid ? 3 : 0); if (mt) { const mp = f.midPt, dd = r => { const w = r.wall, al = mp ? (w.o === 'h' ? mp[0] : mp[1]) : 0, pc = w.o === 'h' ? mp && mp[1] : mp && mp[0]; return mp ? Math.abs(pc - w.c) + Math.max(0, r.a - al, al - r.b) : -(r.b - r.a); };
+        const cand = runs.filter(r => r.z.includes(k) && isOpenZ(r.z[0] === k ? r.z[1] : r.z[0]) && r.b - r.a >= 900).sort((a, c) => dd(a) - dd(c))[0];
+        if (cand) { const Lm = Math.min(cand.b - cand.a - 300, front.midW || (mt === 2 ? 1500 : 1800)); let a0 = cand.a + 150; if (mp) { const al = cand.wall.o === 'h' ? mp[0] : mp[1]; a0 = clamp(Math.round((al - Lm / 2) / 10) * 10, cand.a + 150, cand.b - 150 - Lm); } op(cand.wall, a0, a0 + Lm, 'triple', 0, 2300, { side: cand.z[1] === k ? -1 : 1, panels: mt }); b.midPt = cand.wall.o === 'h' ? [a0 + Lm / 2, cand.wall.c] : [cand.wall.c, a0 + Lm / 2]; }
+        else err('중문: 현관과 집 안이 트인 경계가 900mm 이상 있어야 중문을 낼 수 있습니다.', [], 'warn'); } return; }
     if (openOf(b)) return;
     const sp = f.spaces.find(s => s.id === b.ref), door = sp ? sp.door : kind === 'kitchen' ? K.door : kind === 'dining' ? Dg.door : null; if (!door) return;
     const dw = clamp(door.w || 900, 600, 900), kd = door.t === 'slide' ? 'sliding' : door.t === 'none' ? 'open' : 'door', mine = runs.filter(r => r.z.includes(k) && r.b - r.a >= dw + 100);
@@ -2220,8 +2225,8 @@ function openingSolids(add, w, o) {
     along(o.a, o.b, 0, o.z1, -25, 25, 'door', 'steel');
     along((o.a + o.b) / 2 - 8, (o.a + o.b) / 2 + 8, 0, o.z1, -30, 30, 'door', 'frame');
   } else if (o.kind === 'triple') {
-    const L3 = (o.b - o.a) / 3 + 40;
-    for (let k = 0; k < 3; k++) { const a0 = o.a + k * (o.b - o.a - L3) / 2; along(a0, a0 + L3, 0, o.z1, o.side * (40 + k * 45), o.side * (75 + k * 45), 'door', 'glassFrost'); along(a0, a0 + 40, 0, o.z1, o.side * (40 + k * 45), o.side * (75 + k * 45), 'door', 'frame'); }
+    const NP = o.panels || 3, L3 = (o.b - o.a) / NP + 40;
+    for (let k = 0; k < NP; k++) { const a0 = o.a + k * (o.b - o.a - L3) / (NP - 1); along(a0, a0 + L3, 0, o.z1, o.side * (40 + k * 45), o.side * (75 + k * 45), 'door', 'glassFrost'); along(a0, a0 + 40, 0, o.z1, o.side * (40 + k * 45), o.side * (75 + k * 45), 'door', 'frame'); }
   } else if (o.kind === 'front') {
     along(o.a, o.b, o.z0, o.z1, -30, 30, 'door', 'doorExt', { ext: true });
     if (o.double) along((o.a + o.b) / 2 - 10, (o.a + o.b) / 2 + 10, o.z0, o.z1, -45, 45, 'door', 'frame', { ext: true });
@@ -2624,7 +2629,7 @@ function stairPlan(g, st, FF, fi, N) {
 function openingPlan(g, w, o) {
   if (o.kind === 'open') return;
   if (o.kind === 'evdoor') { const H = w.o === 'h', c = w.c; if (H) { g.r('door', o.a, c - 25, o.b, c + 25); g.l('door', (o.a + o.b) / 2, c - 25, (o.a + o.b) / 2, c + 25); } else { g.r('door', c - 25, o.a, c + 25, o.b); g.l('door', c - 25, (o.a + o.b) / 2, c + 25, (o.a + o.b) / 2); } return; }
-  if (o.kind === 'triple') { const H = w.o === 'h', c = w.c, L3 = (o.b - o.a) / 3 + 40; for (let k = 0; k < 3; k++) { const a0 = o.a + k * (o.b - o.a - L3) / 2, off0 = o.side * (40 + k * 45), off1 = o.side * (75 + k * 45); if (H) g.r('door', a0, c + Math.min(off0, off1), a0 + L3, c + Math.max(off0, off1)); else g.r('door', c + Math.min(off0, off1), a0, c + Math.max(off0, off1), a0 + L3); } const tx = (o.a + o.b) / 2; if (H) g.tx('door', tx, c + o.side * 320, '중문', 110); else g.tx('door', c + o.side * 350, tx, '중문', 110); return; }
+  if (o.kind === 'triple') { const H = w.o === 'h', c = w.c, NP = o.panels || 3, L3 = (o.b - o.a) / NP + 40; for (let k = 0; k < NP; k++) { const a0 = o.a + k * (o.b - o.a - L3) / (NP - 1), off0 = o.side * (40 + k * 45), off1 = o.side * (75 + k * 45); if (H) g.r('door', a0, c + Math.min(off0, off1), a0 + L3, c + Math.max(off0, off1)); else g.r('door', c + Math.min(off0, off1), a0, c + Math.max(off0, off1), a0 + L3); } const tx = (o.a + o.b) / 2; if (H) g.tx('door', tx, c + o.side * 320, '중문', 110); else g.tx('door', c + o.side * 350, tx, '중문', 110); return; }
   if (o.kind === 'front' && o.double) { const s = o.side, t = w.t, face = w.c + s * t / 2, mid = (o.a + o.b) / 2, L2 = (o.b - o.a) / 2, H = w.o === 'h', P = (al, off) => H ? [al, off] : [off, al];
     for (const [hx, oth] of [[o.a, mid], [o.b, mid]]) { const Hp = P(hx, face), E = P(hx, face + s * L2), Cp = P(oth, face); g.l('door', ...Hp, ...E); const ang = p => Math.atan2(p[1] - Hp[1], p[0] - Hp[0]) * 180 / Math.PI; let a0 = ang(E), a1 = ang(Cp); if ((((a1 - a0) % 360) + 360) % 360 > 180) [a0, a1] = [a1, a0]; g.a('door', Hp[0], Hp[1], L2, a0, a1); }
     return; }
@@ -3242,6 +3247,7 @@ function fancyItem(f, X) {
       if (id === 'stool') { add(cyl(Math.min(W, D) / 2, Math.min(W, D) / 2 - .01, .05, X.wood, 24), 0, 0, H - .05); for (let k = 0; k < 3; k++) { const a = k * 2.094; const l = cyl(.014, .012, H - .05, X.woodDark, 8); l.rotation.y = Math.cos(a) * .12; l.rotation.x = Math.sin(a) * .12; add(l, Math.cos(a) * W * .28, Math.sin(a) * D * .28, 0); } add(new THREE.Mesh(new THREE.TorusGeometry(Math.min(W, D) * .3, .008, 6, 24), X.metal), 0, 0, H * .35); break; }
       if (id === 'bench') { add(rbox(W, D, .05, .02, X.wood), 0, 0, H - .05); [-1, 1].forEach(a => add(rbox(.05, D - .06, H - .05, .01, X.woodDark), a * (W / 2 - .1), 0, 0)); add(rbox(W - .1, D - .08, .05, .03, X.fab3), 0, 0, H); break; }
       if (id === 'officeChair') return fancyItem({ ...f, kind: 'chair' }, X);
+      if (id === 'shoe' || id === 'shoeTall') return fancyItem({ ...f, kind: 'shoe' }, X);
       if (id === 'diningChair') return fancyItem({ ...f, kind: 'dchair' }, X);
       if (id === 'rocking') { [-1, 1].forEach(a => { const rr = new THREE.Mesh(new THREE.TorusGeometry(.6, .015, 6, 30, 1.2), X.woodDark); rr.rotation.y = Math.PI / 2; rr.rotation.x = -Math.PI / 2 - .6 + Math.PI; add(rr, a * (W / 2 - .05), 0, .6); [-.2, .25].forEach(b2 => add(cyl(.014, .014, .3, X.woodDark, 8), a * (W / 2 - .05), b2, .06)); }); add(rbox(W - .06, D * .55, .05, .03, X.wood), 0, -.05, .38); add(rbox(W - .1, D * .5, .06, .04, X.fab1), 0, -.05, .43); for (let k = 0; k < 4; k++) { const sl = box(.05, .025, .5, X.wood); sl.rotation.x = -.25; add(sl, -W / 2 + .12 + k * (W - .24) / 3, D * .25, .45); } add(box(W - .06, .03, .05, X.wood), 0, D * .3, .92); break; }
       const soft = /소파|빈백|방석|매트/.test(f.label || ''); add(rbox(W, D, H, soft ? .12 : .02, soft ? X.fab2 : X.wood), 0, 0, 0); break; }
@@ -3746,7 +3752,7 @@ function select(sel, tab) { ST.sel = sel; if (tab) ST.itab = tab; if (sel && sel
 function spOf(b, f = curF()) { return f.spaces.find(q => q.id === b.ref) || null; }
 function kindOfB(b, f = curF()) { const sp = spOf(b, f); return sp ? sp.kind : b.ref; }
 function doorOf(b, f = curF()) { const sp = spOf(b, f); if (sp) return ['living', 'kitchen', 'dining'].includes(sp.kind) && isFile() ? null : sp.door; return b.ref === 'kitchen' ? f.kitchen.door : b.ref === 'dining' ? f.dining.door : null; }
-function furnListOf(b, f = curF()) { const sp = spOf(b, f); if (sp) return sp.furn; if (b.ref === 'living') return f.livingFurn; if (b.ref === 'kitchen') return f.kitchen.furn; if (b.ref === 'dining') return f.dining.furn; return null; }
+function furnListOf(b, f = curF()) { const sp = spOf(b, f); if (sp) return sp.furn; if (b.ref === 'entry') return (f.entryFurn = f.entryFurn || [{ id: 'shoe', n: 1, w: 1200, d: 350 }]); if (b.ref === 'living') return f.livingFurn; if (b.ref === 'kitchen') return f.kitchen.furn; if (b.ref === 'dining') return f.dining.furn; return null; }
 function renderInsp() {
   const I = $('#insp'); if (!ST.P || !ST.sel || !ST.M) { I.hidden = true; return; }
   const f = curF(), fi = curFi(); let h = '';
@@ -3779,15 +3785,15 @@ function renderInsp() {
         ${b.ref === 'kitchen' || (sp && sp.kind === 'kitchen' && isFile()) ? `<h4>주방 형태</h4><div class="ichips">${Object.entries(KITCHENS).map(([q, v]) => `<button data-ikt="${q}" aria-pressed="${f.kitchen.type === q}">${v}</button>`).join('')}</div><h4>조리대 붙는 쪽</h4><div class="ichips">${[['n', '위'], ['s', '아래'], ['w', '왼쪽'], ['e', '오른쪽']].map(([q, v]) => `<button data-ikm="${q}" aria-pressed="${(f.kitchen.main || 'e') === q}">${v}</button>`).join('')}</div>` : ''}
         ${sp && ['bath', 'dress'].includes(sp.kind) && !isFile() ? `<label class="ilab">붙이기<select data-iatt><option value="">독립 공간</option>${f.spaces.filter(s => ['master', 'bed', 'other'].includes(s.kind)).map(s => `<option value="${s.id}"${sp.attach === s.id ? ' selected' : ''}>${esc(s.name || SPACE_KINDS[s.kind])}에 귀속</option>`).join('')}</select></label>` : ''}
         <p class="ihint">도면에서 공간 안을 끌면 옮겨지고, 변의 네모를 끌면 크기가 바뀝니다. 변을 두 번 누르면 꺾인 모양을 만들 수 있습니다.</p>`;
-    } else if (ST.itab === 'furn') { const fl = furnListOf(b, f); body = (fl ? furnRows(fl, sp ? sp.kind : b.ref, sp ? 'S' + sp.id : b.ref === 'living' ? 'L' : b.ref === 'kitchen' ? 'K' : b.ref === 'dining' ? 'G' : 'X') : '<p class="ihint">신발장은 이 탭이 열려 있을 때 도면에서 끌어 옮기고, 두 번 눌러 돌립니다.</p>') + fitLine(room ? room.key : '') + '<p class="ihint">이 탭이 열려 있을 때 도면에서 이 공간의 가구를 끌어 옮기고, 두 번 눌러 돌립니다.</p>'; }
+    } else if (ST.itab === 'furn') { const fl = furnListOf(b, f); body = (fl ? furnRows(fl, sp ? sp.kind : b.ref, sp ? 'S' + sp.id : b.ref === 'living' ? 'L' : b.ref === 'kitchen' ? 'K' : b.ref === 'dining' ? 'G' : b.ref === 'entry' ? 'E' : 'X') : '<p class="ihint">신발장은 이 탭이 열려 있을 때 도면에서 끌어 옮기고, 두 번 눌러 돌립니다.</p>') + fitLine(room ? room.key : '') + '<p class="ihint">이 탭이 열려 있을 때 도면에서 이 공간의 가구를 끌어 옮기고, 두 번 눌러 돌립니다.</p>'; }
     else if (ST.itab === 'win') { const key = sp ? sp.id : b.ref, auto = !(f.winAuto && f.winAuto[key] === false), mine = (f.windows || []).filter(w => onBoundary(b, w.pt));
         body = `<label class="tog"><input type="checkbox" data-iwa${auto ? ' checked' : ''}><span></span>자동 창 (바깥벽 쪽에 알아서)</label>
         <div class="tipbox">👉 도면에서 이 공간의 <b>바깥벽을 누르면</b> 그 자리에 창이 생깁니다.${ST.selWin ? ' 고른 창은 누른 자리로 <b>옮겨집니다</b>.' : ''}</div>
         ${mine.length ? `<h4>내가 놓은 창</h4>${mine.map(w => `<div class="wrow${ST.selWin === w.id ? ' on' : ''}"><button class="btn sm" data-wsel="${w.id}">${ST.selWin === w.id ? '✓ 고름' : '고르기'}</button><select data-ww="${w.id}">${[600, 900, 1200, 1500, 1800, 2100, 2400, 3000, 3600].map(v => `<option value="${v}"${w.w === v ? ' selected' : ''}>폭 ${fmt(v)}</option>`).join('')}</select><select data-wsill="${w.id}">${[[0, '바닥까지(통창)'], [400, '창턱 400'], [900, '창턱 900'], [1200, '창턱 1,200'], [1500, '높은 창 1,500']].map(([v, n]) => `<option value="${v}"${(w.sill ?? 900) === v ? ' selected' : ''}>${n}</option>`).join('')}</select><button class="btn sm danger" data-wdel="${w.id}">빼기</button></div>`).join('')}` : '<p class="ihint">아직 직접 놓은 창이 없습니다.</p>'}`; }
     else if (ST.itab === 'door' && b.ref === 'entry') { const Fr = B().front; body = `<h4>현관문 폭</h4><div class="ichips">${[900, 1000, 1100, 1200, 1400, 1600, 1800, 2000].map(v => `<button data-ifw="${v}" aria-pressed="${Fr.w === v}">${fmt(v)}${v >= 1500 ? ' 양개' : ''}</button>`).join('')}</div>
         <h4>열리는 방향</h4><div class="ichips"><button data-ifh="L" aria-pressed="${Fr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-ifh="R" aria-pressed="${Fr.hand === 'R'}">⟳ 오른쪽 경첩</button></div>
-        <label class="tog"><input type="checkbox" data-ifm${Fr.mid ? ' checked' : ''}><span></span>중문 (3연동 슬라이딩)</label>
-        <div class="tipbox">👉 도면에서 현관의 <b>바깥벽 쪽 벽을 누르면</b> 그 자리로 현관문이 옮겨집니다.${isVilla() ? ' (빌라는 계단실 쪽 벽)' : ''}</div><div class="ibtns"><button class="btn" data-ic="fauto2">↺ 현관문 위치 자동</button></div>`; }
+        <h4>중문</h4><div class="ichips">${[[0, '없음'], [2, '2연동 슬라이딩'], [3, '3연동 슬라이딩']].map(([v, n]) => `<button data-imt="${v}" aria-pressed="${(Fr.midType ?? (Fr.mid ? 3 : 0)) === v}">${n}</button>`).join('')}</div>${(Fr.midType ?? (Fr.mid ? 3 : 0)) ? `<label class="ilab">중문 폭<select data-imw>${[1200, 1500, 1800, 2100, 2400].map(v => `<option value="${v}"${(Fr.midW || ((Fr.midType ?? 3) === 2 ? 1500 : 1800)) === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>` : ''}
+        <div class="tipbox">👉 도면에서 현관의 <b>바깥벽을 누르면 현관문</b>이, <b>집 안과 만나는 경계를 누르면 중문</b>이 그 자리로 옮겨집니다.${isVilla() ? ' (빌라는 계단실 쪽 벽)' : ''}</div><div class="ibtns"><button class="btn" data-ic="fauto2">↺ 현관문·중문 위치 자동</button></div>`; }
     else if (ST.itab === 'door') { const dr = doorOf(b, f); body = `<div class="ichips">${Object.entries(DOORS).map(([q, v]) => `<button data-idt="${q}" aria-pressed="${dr.t === q}">${v}</button>`).join('')}</div>${dr.t === 'slide' ? (() => { const pl = ST.M.floors[curFi()].blocksPlaced.find(q => q.id === b.id), vert = pl && pl.doorO === 'v', to = dr.slideTo || 'b'; return `<h4>밀리는 방향</h4><div class="ichips">${vert ? `<button data-isl="a" aria-pressed="${to === 'a'}">↓ 아래쪽으로 슬라이딩</button><button data-isl="b" aria-pressed="${to === 'b'}">↑ 위쪽으로 슬라이딩</button>` : `<button data-isl="a" aria-pressed="${to === 'a'}">← 왼쪽으로 슬라이딩</button><button data-isl="b" aria-pressed="${to === 'b'}">오른쪽으로 슬라이딩 →</button>`}</div><h4>문짝이 붙는 면</h4><div class="ichips"><button data-ido="0" aria-pressed="${!dr.out}">방 안쪽 면</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽 면</button></div><p class="ihint">방향은 평면도(북쪽이 위)를 보는 기준입니다.</p>`; })()
           : dr.t === 'swing' ? `<h4>열리는 방향</h4><div class="ichips"><button data-idh="L" aria-pressed="${dr.hand !== 'R'}">⟲ 왼쪽 경첩</button><button data-idh="R" aria-pressed="${dr.hand === 'R'}">⟳ 오른쪽 경첩</button><button data-ido="0" aria-pressed="${!dr.out}">안쪽으로 열림</button><button data-ido="1" aria-pressed="${!!dr.out}">바깥쪽으로 열림</button></div>` : ''}<label class="ilab">문 폭<select data-idw>${[700, 750, 800, 850, 900].map(v => `<option value="${v}"${dr.w === v ? ' selected' : ''}>${fmt(v)} mm</option>`).join('')}</select></label>
         <div class="tipbox">👉 도면에서 이 공간의 <b>벽을 누르면</b> 그 자리로 문이 옮겨집니다.</div><div class="ibtns"><button class="btn" data-ic="dauto">↺ 문 위치 자동</button></div>`; }
@@ -3820,7 +3826,7 @@ function bindInsp() {
     if (d.wdel) { f.windows = (f.windows || []).filter(w => w.id !== d.wdel); if (ST.selWin === d.wdel) ST.selWin = null; return rebuild(true); }
     if (d.iw2 != null) return;
     if (d.idh && b) { doorOf(b, f).hand = d.idh; return rebuild(true); }
-    if (d.ifw) { Bq.front.w = +d.ifw; return rebuild(true); } if (d.ifh) { Bq.front.hand = d.ifh; return rebuild(true); } if (d.ic === 'fauto2') { delete f.frontPt; return rebuild(true); }
+    if (d.ifw) { Bq.front.w = +d.ifw; return rebuild(true); } if (d.ifh) { Bq.front.hand = d.ifh; return rebuild(true); } if (d.imt != null) { Bq.front.midType = +d.imt; Bq.front.mid = +d.imt > 0; return rebuild(true); } if (d.ic === 'fauto2') { delete f.frontPt; delete f.midPt; return rebuild(true); }
     if (d.ido && b) { doorOf(b, f).out = d.ido === '1'; return rebuild(true); }
     if (d.isl && b) { doorOf(b, f).slideTo = d.isl; return rebuild(true); }
   };
@@ -3829,6 +3835,7 @@ function bindInsp() {
     if (d.istw != null) { Bq.stairW = +t.value; return rebuild(true); }
     if ((d.fwl != null || d.fwt != null) && ST.sel && ST.sel.type === 'fwall') { const w = f.freeWalls.find(q => q.id === ST.sel.id); if (d.fwt != null) w.t = clamp(r10(+t.value), 50, 400); else { const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1, n = Math.max(100, r10(+t.value)); w.x2 = r10(w.x1 + (w.x2 - w.x1) / L * n); w.y2 = r10(w.y1 + (w.y2 - w.y1) / L * n); } return rebuild(true); }
     if (d.ifm != null) { Bq.front.mid = t.checked; return rebuild(true); }
+    if (d.imw != null) { Bq.front.midW = +t.value; return rebuild(true); }
     if (d.iwa != null && b) { const sp = spOf(b, f), key = sp ? sp.id : b.ref; f.winAuto = f.winAuto || {}; if (t.checked) delete f.winAuto[key]; else f.winAuto[key] = false; return rebuild(true); }
     if (d.ww || d.wsill) { const w = (f.windows || []).find(q => q.id === (d.ww || d.wsill)); if (w) { if (d.ww) w.w = +t.value; else { w.sill = +t.value; w.head = Math.max(2100, w.sill + 600); } } return rebuild(true); }
     if (d.idw != null && b) { doorOf(b, f).w = +t.value; return rebuild(true); }
@@ -3852,7 +3859,7 @@ function removeSel() {
   else if (b.ref === 'living') f.living = false; else if (b.ref === 'kitchen' || b.ref === 'dining') f[b.ref].on = false; else if (b.ref === 'entry') f.entry = false;
   f.blocks = f.blocks.filter(q => q !== b); select(null); rebuild(true);
 }
-function furnPath(path) { const f = curF(); if (path === 'L') return ST.P.mode === 'remodel' && curFi() === 1 ? ST.P.r.loftFl.livingFurn : f.livingFurn; if (path === 'K') return f.kitchen.furn; if (path === 'G') return f.dining.furn; const sp = f.spaces.find(q => q.id === path.slice(1)); return sp ? sp.furn : []; }
+function furnPath(path) { const f = curF(); if (path === 'L') return ST.P.mode === 'remodel' && curFi() === 1 ? ST.P.r.loftFl.livingFurn : f.livingFurn; if (path === 'K') return f.kitchen.furn; if (path === 'G') return f.dining.furn; if (path === 'E') return (f.entryFurn = f.entryFurn || [{ id: 'shoe', n: 1, w: 1200, d: 350 }]); const sp = f.spaces.find(q => q.id === path.slice(1)); return sp ? sp.furn : []; }
 function furnChange(t) {
   const d = t.dataset;
   if (d.fc) { const [path, id] = d.fc.split('|'), list = furnPath(path), c = catById(id), it = list.find(x => x.id === id); if (t.checked) { if (it) it.n = Math.max(1, it.n); else list.push({ id, n: 1, w: c.w, d: c.d }); } else if (it) list.splice(list.indexOf(it), 1); }
@@ -3955,7 +3962,7 @@ function editDown(mx, my, ev) {
     if (best === null && inPoly(ptsOf(b), lx, my)) { toast('이 공간은 바깥벽에 닿지 않아 창을 낼 수 없습니다.'); return true; } }
   if (b && ST.itab === 'door' && b.ref === 'entry') { const { W, D, x0 = 0, y0 = 0 } = floorDims(fi), pts = ptsOf(b); let best = null;
     pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length], vert = p[0] === q[0], onExt = vert ? (Math.abs(p[0] - x0) < 1 || Math.abs(p[0] - x0 - W) < 1) : (Math.abs(p[1] - y0) < 1 || Math.abs(p[1] - y0 - D) < 1); const t = vert ? [p[0], clamp(my, Math.min(p[1], q[1]), Math.max(p[1], q[1]))] : [clamp(lx, Math.min(p[0], q[0]), Math.max(p[0], q[0])), p[1]], dd = Math.hypot(lx - t[0], my - t[1]); if (!best || dd < best.d) best = { d: dd, t, onExt }; });
-    if (best && best.d < Math.max(400, 30 * s)) { if (!best.onExt) { toast('현관문은 바깥벽 쪽 벽에만 낼 수 있습니다.'); return true; } f.frontPt = [r10(best.t[0]), r10(best.t[1])]; rebuild(true); toast('현관문을 옮겼습니다.'); return true; } }
+    if (best && best.d < Math.max(400, 30 * s)) { if (!best.onExt) { const Fr = B().front, mt = Fr.midType ?? (Fr.mid ? 3 : 0); if (!mt) { toast('바깥벽을 누르면 현관문이 옮겨집니다. 중문을 고르면 안쪽 경계에 중문을 낼 수 있습니다.', 3500); return true; } f.midPt = [r10(best.t[0]), r10(best.t[1])]; rebuild(true); toast('중문을 옮겼습니다.'); return true; } f.frontPt = [r10(best.t[0]), r10(best.t[1])]; rebuild(true); toast('현관문을 옮겼습니다.'); return true; } }
   if (b && ST.itab === 'door' && doorOf(b, f)) { const pts = ptsOf(b); let best = null; pts.forEach((p, k) => { const q = pts[(k + 1) % pts.length], vert = p[0] === q[0], t = vert ? [p[0], clamp(my, Math.min(p[1], q[1]), Math.max(p[1], q[1]))] : [clamp(lx, Math.min(p[0], q[0]), Math.max(p[0], q[0])), p[1]], dd = Math.hypot(lx - t[0], my - t[1]); if (!best || dd < best.d) best = { d: dd, t }; });
     if (best && best.d < Math.max(400, 30 * s)) { const dr = doorOf(b, f); dr.pt = [r10(best.t[0]), r10(best.t[1])]; delete dr.at; rebuild(true); toast('문을 옮겼습니다.'); return true; } }
   if (b && ST.itab === 'size') {
@@ -4224,7 +4231,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.7 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.8 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
