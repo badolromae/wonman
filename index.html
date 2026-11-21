@@ -499,6 +499,11 @@ body.optopen .right{transform:none}
 .alist{display:grid;gap:6px}.arow{display:flex;gap:6px;align-items:center}.arow .btn:first-child{flex:1;justify-content:flex-start}.arow.on .btn:first-child{border-color:var(--accent);background:var(--accent-soft)}
 #guide{position:fixed;inset:0;z-index:90;background:rgba(30,40,70,.35);display:grid;place-items:center;padding:20px}#guide[hidden]{display:none}.g-in{width:min(420px,100%);background:#fff;border-radius:26px;box-shadow:var(--sh);padding:26px;display:grid;gap:10px;text-align:center}.g-ic{font-size:54px}.g-step{font-size:13px;color:var(--sub);font-weight:700}.g-in h3{margin:0;font-size:22px}.g-in p{margin:0;font-size:15.5px;line-height:1.6;color:#4a5878}.g-in .ibtns{justify-content:center;margin-top:8px}
 @media (max-width:1280px){.topdock .tbtn .t{display:none}.topdock .tbtn{padding:0 11px}#bAlts .t{display:inline}}
+
+.right .optclose{display:flex!important;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:3;background:#fff;padding:12px 14px;margin:-14px -14px 12px;border-bottom:1px solid var(--line2)}
+.right .optclose b{font-size:16px}.right .optclose .btn{min-height:42px;border-radius:12px;font-weight:700}
+#optBack{display:none;position:fixed;inset:56px 0 0 0;z-index:29;background:rgba(30,40,70,.12)}body.optopen #optBack{display:block}
+.cprow{display:flex;flex-wrap:wrap;gap:8px}.cprow label{display:flex;gap:6px;align-items:center;min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);font-weight:700;cursor:pointer}.cprow input{width:20px;height:20px;accent-color:var(--accent)}
 @media print{
  body *{visibility:hidden}#svg,#svg *{visibility:visible}
  #svg{position:fixed;inset:0;width:100%;height:100%}
@@ -549,6 +554,7 @@ body.optopen .right{transform:none}
    <div class="seg" role="group" aria-label="보기"><button data-view="2d" aria-pressed="true">2D 평면</button><button data-view="model" aria-pressed="false">3D</button><button data-view="render" aria-pressed="false">렌더링</button></div>
    <div class="seg" style="padding:4px"><button id="bUndo" title="되돌리기 (Ctrl+Z)" disabled>↶</button><button id="bRedo" title="다시 하기 (Ctrl+Y)" disabled>↷</button></div>
    <div class="fchips" id="floorChips"></div>
+   <button class="tbtn" id="bCopyFl" hidden title="층 복사">📋<span class="t"> 층 복사</span></button>
    <div class="sp"></div>
    <button class="tbtn" id="bAlts" title="A안">🗂<span class="t"> A안</span></button>
    <button class="tbtn" id="bArea" title="면적">📊<span class="t"> 면적</span></button>
@@ -566,12 +572,14 @@ body.optopen .right{transform:none}
   <div class="palette" id="palette"></div>
   <div class="insp" id="insp" hidden></div>
   <div class="themepop" id="themePop" hidden></div>
+  <div class="themepop" id="copyPop" hidden></div>
   <div class="themepop" id="areaPop" hidden></div>
   <div class="themepop" id="altPop" hidden></div>
   <div class="status num"><span class="xy" id="xy"></span><span id="stInfo"></span><span class="wn" id="stWarn"></span></div>
  </main>
+ <div id="optBack"></div>
  <aside class="right" id="opts" aria-label="도면·내보내기">
-  <div class="optclose"><b>도면 · 내보내기</b><button class="btn sm" id="optClose">닫기</button></div>
+  <div class="optclose"><b>도면 · 내보내기</b><button class="btn" id="optClose" title="닫기 (Esc)">✕ 닫기</button></div>
   <div id="optBody"></div>
  </aside>
  <div id="start" hidden><div class="start-in"><div class="brand"><svg><use href="#logo"/></svg><b>원만하다</b></div><p class="lead">무엇을 해 볼까요?</p><div class="cards" id="startCards"></div><div id="startMore" style="margin-top:16px"></div></div></div>
@@ -3315,7 +3323,7 @@ function startApp() {
   applyTheme(localStorage.getItem('wonman.theme') || 'auto');
   $$('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('#bFit').onclick = fitCurrent; $('#bMeasure').onclick = () => setMeasure(!ST.measure);
-  $('#bOpt').onclick = () => document.body.classList.toggle('optopen'); $('#optClose').onclick = () => document.body.classList.remove('optopen');
+  $('#bOpt').onclick = () => document.body.classList.toggle('optopen'); $('#optClose').onclick = () => document.body.classList.remove('optopen'); $('#optBack').onclick = () => document.body.classList.remove('optopen'); $('#bCopyFl').onclick = openCopy;
   $('#bHome').onclick = () => showStart(); $('#bSave').onclick = saveProject; $('#bMore').onclick = openMore; $('#bNew').onclick = newStart; $('#bSetup').onclick = () => openFlow();
   $('#bCheck').onclick = () => { if (ST.M) openCheck(); };
   $('#bTheme').onclick = () => openTheme(); $('#bArea').onclick = openArea; $('#bAlts').onclick = openAlts; $('#bUndo').onclick = () => histGo(-1); $('#bRedo').onclick = () => histGo(1); $('#bFlow').onclick = () => { ST.hidden.hflow = !ST.hidden.hflow; ST.hidden.clear = ST.hidden.hflow; $('#bFlow').setAttribute('aria-pressed', !ST.hidden.hflow); draw2D(); };
@@ -3540,6 +3548,7 @@ function updateBar() {
   fc.onclick = e => { const v = e.target.closest('[data-fv]'); if (v) { GL3.floorView = v.dataset.fv === 'all' ? 'all' : +v.dataset.fv; GL3.applyFloorView(); updateBar(); return; }
     const b = e.target.closest('[data-fl]'); if (!b) return; ST.sheet = 'plan' + b.dataset.fl; select(null); draw2D(true); updateBar(); buildPalette(); };
   $('#bSetup').hidden = !ST.P || ST.P.mode !== 'building';
+  $('#bCopyFl').hidden = !ST.P || ST.P.mode !== 'building' || ST.P.b.floors < 2 || ST.view !== '2d';
   const ab = $('#bAlts'); if (ab && ST.P) { const a = ST.P.alts && ST.P.alts.find(q => q.id === ST.P.altCur); ab.innerHTML = `🗂<span class="t"> ${esc(a ? a.name : 'A안')}</span>`; }
 }
 function afterFix() { rebuild(true); openCheck(); }
@@ -3597,6 +3606,35 @@ function openTheme(keep) {
   T.onchange = e => { const t = e.target, d = t.dataset;
     if (d.tcc != null) { th.c = t.value; th.mode = th.mode || 'mono'; return re(); }
     if (d.trw != null || d.trf != null) { th.rooms = th.rooms || {}; const o = th.rooms[ST.tdRoom] = th.rooms[ST.tdRoom] || {}; if (d.trw != null) o.wall = t.value; else o.floor = t.value; return re(); } };
+}
+
+/* ---------- 📋 층 복사 ---------- */
+function openCopy() {
+  const T = $('#copyPop'); if (!T.hidden) { T.hidden = true; return; } if (!ST.P || ST.P.mode !== 'building') return;
+  const b = ST.P.b, fi = curFi(), pil = isVilla() && b.piloti, targets = [...Array(b.floors).keys()].filter(i => i !== fi && !(pil && i === 0));
+  if (pil && fi === 0) return toast('1층은 필로티라 복사할 세대가 없습니다. 세대가 있는 층에서 눌러 주세요.');
+  if (!targets.length) return toast('복사할 다른 층이 없습니다.');
+  T.innerHTML = `<div class="tp-h"><b>📋 ${floorLabel(fi)}을 다른 층에 복사</b><button class="x" data-cp="x">✕</button></div>
+    <p class="ihint">지금 층의 공간·크기·위치·가구·문·창·그린 벽을 고른 층에 그대로 복사합니다. 고른 층에 있던 배치는 바뀝니다(↶로 되돌릴 수 있음).${isVilla() ? '' : ' 층마다 크기가 다르면 넘치는 공간은 줄이거나 반영되지 않을 수 있습니다.'}</p>
+    <div class="cprow">${targets.map(i => `<label><input type="checkbox" data-ct="${i}" checked>${floorLabel(i)}</label>`).join('')}</div>
+    <div class="ibtns tp-foot"><button class="btn" data-cp="x">취소</button><button class="btn pri big" data-cp="go">복사하기</button></div>`;
+  T.hidden = false;
+  T.onclick = e => { const btn = e.target.closest('button'); if (!btn) return; if (btn.dataset.cp === 'x') { T.hidden = true; return; }
+    if (btn.dataset.cp === 'go') { const sel = $$('[data-ct]', T).filter(x => x.checked).map(x => +x.dataset.ct); if (!sel.length) return toast('복사할 층을 골라 주세요.'); copyFloorTo(fi, sel); T.hidden = true; } };
+}
+function copyFloorTo(fi, targets) {
+  const b = ST.P.b, src = b.fl[fi];
+  for (const ti of targets) {
+    const dst = b.fl[ti], c = clone(src), map = {};
+    c.spaces.forEach(sp => { const n = uid(); map[sp.id] = n; sp.id = n; }); c.spaces.forEach(sp => { if (sp.attach) sp.attach = map[sp.attach] || null; });
+    c.blocks = (c.blocks || []).map(q => ({ ...q, id: uid(), ref: map[q.ref] || q.ref }));
+    if (c.winAuto) c.winAuto = Object.fromEntries(Object.entries(c.winAuto).map(([k, v]) => [map[k] || k, v]));
+    (c.windows || []).forEach(w => w.id = uid()); (c.freeWalls || []).forEach(w => w.id = uid());
+    c.py = dst.py; c.W = dst.W; c.D = dst.D; c.dim = dst.dim;
+    if (!isVilla()) { c.entry = ti === 0 ? !!src.entry || dst.entry : false; if (!c.entry) c.blocks = c.blocks.filter(q => q.ref !== 'entry'); delete c.frontPt; }
+    b.fl[ti] = c;
+  }
+  rebuild(true); toast(`${floorLabel(fi)}을 ${targets.map(floorLabel).join(', ')}에 복사했습니다.`, 3500);
 }
 
 /* ---------- 📊 면적 요약 ---------- */
@@ -4186,7 +4224,7 @@ function openMore() {
    <div class="form"><label class="f">새 아이디<input type="text" id="nid" autocomplete="off"></label><label class="f">새 비밀번호<input type="password" id="npw" autocomplete="new-password"></label></div>
    <div class="row-acts" style="margin-top:8px"><button class="btn" data-a="cred">코드 만들기</button></div><pre class="code" id="credOut" hidden></pre>
    <h3>로그인</h3><button class="btn" data-a="logout">로그아웃</button>
-   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.6 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
+   <p class="muted" style="font-size:12px;margin-top:18px">원만하다 8.7 · DWG 읽기는 LibreDWG(GPL-3.0) 기반 libredwg-web을 씁니다.</p>`;
   d.onclick = async e => {
     if (e.target === d || e.target.closest('[data-close]')) return d.close();
     const a = e.target.closest('[data-a]')?.dataset.a;
